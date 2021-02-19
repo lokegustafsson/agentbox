@@ -4,7 +4,7 @@ use crate::{
         bounding_ball_tree::{self, Node},
         graphics::{PushConstants, PUSH_CONSTANT_RANGE},
     },
-    WorldState, SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
+    SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
 };
 use std::mem;
 use wgpu::{util::make_spirv, *};
@@ -88,9 +88,10 @@ impl SolidsRenderer {
             bind_group,
         }
     }
-    pub fn update(&mut self, world: &WorldState) {
-        let (spheres, cylinders, cuboids) = world.get_solids();
-
+    pub fn update(
+        &mut self,
+        (spheres, cylinders, cuboids): (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>),
+    ) {
         for sphere in &spheres {
             assert!(sphere.is_valid(), "Invalid sphere: {:?}", sphere);
         }

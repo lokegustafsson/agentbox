@@ -5,7 +5,7 @@ mod solids_renderer;
 
 use crate::{
     common::{SimulationEvent, WorldChannel},
-    model::WorldState,
+    models::Model,
 };
 use anyhow::Result;
 use async_std::task::block_on;
@@ -22,10 +22,10 @@ use winit::{
     window::Window,
 };
 
-pub(crate) fn run_event_loop(
+pub(crate) fn run_event_loop<M: Model + 'static>(
     event_loop: EventLoop<SimulationEvent>,
     window: Window,
-    channel: Arc<WorldChannel>,
+    channel: Arc<WorldChannel<M>>,
     initial_visible: bool,
 ) -> ! {
     let mut last_version = channel.version.load(Ordering::SeqCst);
@@ -62,11 +62,11 @@ pub(crate) fn run_event_loop(
                 let newest = channel.version.load(Ordering::SeqCst);
                 if newest != last_version {
                     last_version = newest;
-                    let world: &WorldState = {
-                        let guard: MutexGuard<'_, Arc<WorldState>> = channel.world.lock().unwrap();
+                    let world: &M::World = {
+                        let guard: MutexGuard<'_, Arc<M::World>> = channel.world.lock().unwrap();
                         &guard.clone()
                     };
-                    graphics.update_world(world);
+                    graphics.update_world(M::get_solids(world));
                 }
                 graphics.render(camera.camera_to_world())
             }

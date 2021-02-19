@@ -7,30 +7,34 @@
 )]
 
 mod common;
-mod model;
+pub mod models;
 mod simulation;
 mod visual;
 
 use common::{SimulationEvent, WorldChannel};
-use std::{sync::Arc, thread};
+use models::{Model, Status};
+use std::{mem, sync::Arc, thread};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
-
-pub use model::{ControlSignals, Status, WorldState};
 
 const WHOLECANVAS_VERTEX: &[u8] = include_bytes!("../target/shaders/wholecanvas.vert.spv");
 const SOLIDS_FRAGMENT: &[u8] = include_bytes!("../target/shaders/solids.frag.spv");
 
-pub fn run_with<F>(initial_status: Status, controller: F) -> !
+pub fn run_with<M: Model + 'static, F>(initial_status: Status, controller: F) -> !
 where
-    F: Send + 'static + FnMut(&WorldState, &mut ControlSignals, &mut Status),
+    F: Send + 'static + FnMut(&M::World, &mut M::Signals, &mut Status),
 {
+    assert_eq!(
+        0,
+        mem::size_of::<M>(),
+        "A non-zero-sized Model type is nonsensical.",
+    );
     let event_loop: EventLoop<SimulationEvent> = EventLoop::with_user_event();
     let window = WindowBuilder::new()
         .with_title("Combat")
         .with_visible(initial_status.display_visual)
         .build(&event_loop)
         .unwrap();
-    let channel = Arc::new(WorldChannel::new());
+    let channel = Arc::new(WorldChannel::<M>::new());
 
     {
         let channel = channel.clone();

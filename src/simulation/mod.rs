@@ -1,8 +1,7 @@
 use crate::{
     common::{SimulationEvent, WorldChannel},
-    model::{ControlSignals, Status, WorldState},
+    models::{Model, Status},
 };
-use cgmath::Vector3;
 use log::{error, warn};
 use std::{
     panic,
@@ -10,28 +9,13 @@ use std::{
 };
 use winit::event_loop::EventLoopProxy;
 
-// Contains physics accelerator structures
-struct Simulation;
-
-impl Simulation {
-    pub fn new(state: &WorldState) -> Self {
-        let _ = state;
-        Self
-    }
-    pub fn update(&mut self, state: &mut WorldState, signals: &ControlSignals) {
-        if signals.float {
-            state.pos += Vector3::unit_z() * 0.0;
-        }
-    }
-}
-
-pub(crate) fn run_simulation<F>(
-    channel: Arc<WorldChannel>,
+pub(crate) fn run_simulation<M: Model, F>(
+    channel: Arc<WorldChannel<M>>,
     proxy: EventLoopProxy<SimulationEvent>,
     mut controller: F,
     initial_status: Status,
 ) where
-    F: Send + FnMut(&WorldState, &mut ControlSignals, &mut Status),
+    F: Send + FnMut(&M::World, &mut M::Signals, &mut Status),
 {
     {
         let proxy = Mutex::new(proxy.clone());
@@ -58,19 +42,17 @@ pub(crate) fn run_simulation<F>(
         }));
     }
 
-    let mut world: WorldState = {
-        let arc: Arc<WorldState> = channel.world.lock().unwrap().clone();
+    let mut world: M::World = {
+        let arc: Arc<M::World> = channel.world.lock().unwrap().clone();
         (*arc).clone()
     };
-    let mut signals = ControlSignals::default();
+    let mut signals = M::new_signals();
     let mut status = initial_status;
     let mut visible = false; // The event loop is initially not visible
 
-    let mut simulation = Simulation::new(&world);
-
     loop {
         controller(&world, &mut signals, &mut status);
-        simulation.update(&mut world, &signals);
+        M::update(&mut world, &signals);
 
         // Tell GUI to quit
         if status.should_quit {

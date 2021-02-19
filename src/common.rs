@@ -1,19 +1,19 @@
-use crate::model::WorldState;
+use crate::models::Model;
 use cgmath::Vector3;
 use getset::CopyGetters;
 use std::sync::{atomic::AtomicUsize, Arc, Mutex};
 
 // Communication between the event loop and the simulation thread
 
-pub struct WorldChannel {
-    pub world: Mutex<Arc<WorldState>>,
+pub struct WorldChannel<M: Model> {
+    pub world: Mutex<Arc<M::World>>,
     pub version: AtomicUsize,
 }
 
-impl WorldChannel {
+impl<M: Model> WorldChannel<M> {
     pub fn new() -> Self {
         Self {
-            world: Mutex::new(Arc::new(WorldState::default())),
+            world: Mutex::new(Arc::new(M::new_world())),
             version: AtomicUsize::new(0),
         }
     }
@@ -100,5 +100,23 @@ impl Sphere {
             && self.pos.z.is_finite()
             && self.radius.is_finite()
             && self.radius.is_sign_positive()
+    }
+}
+
+impl Cylinder {
+    pub fn new(
+        face_a: Vector3<f32>,
+        face_b: Vector3<f32>,
+        radius: f32,
+        color: Vector3<f32>,
+    ) -> Self {
+        Self {
+            face_a,
+            _padding1: 0,
+            face_b,
+            radius,
+            color,
+            _padding2: 0,
+        }
     }
 }

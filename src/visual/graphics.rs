@@ -1,4 +1,7 @@
-use crate::{visual::solids_renderer::SolidsRenderer, WorldState};
+use crate::{
+    common::{Cuboid, Cylinder, Sphere},
+    visual::solids_renderer::SolidsRenderer,
+};
 use anyhow::*;
 use cgmath::{prelude::*, Matrix4, Vector2};
 use log::info;
@@ -73,8 +76,8 @@ impl Graphics {
         self.push_constants.window_size = Vector2::from(size);
         self.swap_chain = build_swap_chain(&self.device, &self.surface, new_size.into());
     }
-    pub fn update_world(&mut self, world: &WorldState) {
-        self.solids_renderer.update(world);
+    pub fn update_world(&mut self, bodies: (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>)) {
+        self.solids_renderer.update(bodies);
         self.solids_renderer.push_to_gpu_buffers(&self.queue);
     }
     pub fn render(&mut self, camera_to_world: Matrix4<f32>) {
