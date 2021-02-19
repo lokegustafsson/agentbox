@@ -3,7 +3,10 @@ mod camera;
 mod graphics;
 mod solids_renderer;
 
-use crate::{physics::WorldState, SimulationEvent, WorldChannel};
+use crate::{
+    common::{SimulationEvent, WorldChannel},
+    model::WorldState,
+};
 use anyhow::Result;
 use async_std::task::block_on;
 use camera::Camera;
@@ -60,7 +63,7 @@ pub(crate) fn run_event_loop(
                 if newest != last_version {
                     last_version = newest;
                     let world: &WorldState = {
-                        let guard: MutexGuard<Arc<WorldState>> = channel.world.lock().unwrap();
+                        let guard: MutexGuard<'_, Arc<WorldState>> = channel.world.lock().unwrap();
                         &guard.clone()
                     };
                     graphics.update_world(world);

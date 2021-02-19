@@ -1,8 +1,8 @@
 use crate::{
-    solid_primitives::{Cuboid, Cylinder, Sphere},
-    SimulationEvent, Status, WorldChannel,
+    common::{SimulationEvent, WorldChannel},
+    model::{ControlSignals, Status, WorldState},
 };
-use cgmath::{prelude::*, Vector3};
+use cgmath::Vector3;
 use log::{error, warn};
 use std::{
     panic,
@@ -11,29 +11,9 @@ use std::{
 use winit::event_loop::EventLoopProxy;
 
 // Contains physics accelerator structures
-pub struct Physics;
+struct Simulation;
 
-#[derive(Clone)]
-pub struct WorldState {
-    pub pos: Vector3<f32>,
-}
-
-impl WorldState {
-    pub(crate) fn get_solids(&self) -> (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>) {
-        const COLOR: Vector3<f32> = Vector3::new(0.0, 0.3, 0.6);
-        (
-            vec![Sphere::new(self.pos, 1.0, COLOR); 5],
-            Vec::new(),
-            Vec::new(),
-        )
-    }
-}
-
-pub struct ControlSignals {
-    pub float: bool,
-}
-
-impl Physics {
+impl Simulation {
     pub fn new(state: &WorldState) -> Self {
         let _ = state;
         Self
@@ -45,21 +25,7 @@ impl Physics {
     }
 }
 
-impl Default for WorldState {
-    fn default() -> Self {
-        Self {
-            pos: Vector3::new(0.0, 0.0, 3.0),
-        }
-    }
-}
-
-impl Default for ControlSignals {
-    fn default() -> Self {
-        Self { float: false }
-    }
-}
-
-pub(crate) fn run_physics<F>(
+pub(crate) fn run_simulation<F>(
     channel: Arc<WorldChannel>,
     proxy: EventLoopProxy<SimulationEvent>,
     mut controller: F,
@@ -100,11 +66,11 @@ pub(crate) fn run_physics<F>(
     let mut status = initial_status;
     let mut visible = false; // The event loop is initially not visible
 
-    let mut physics = Physics::new(&world);
+    let mut simulation = Simulation::new(&world);
 
     loop {
         controller(&world, &mut signals, &mut status);
-        physics.update(&mut world, &signals);
+        simulation.update(&mut world, &signals);
 
         // Tell GUI to quit
         if status.should_quit {

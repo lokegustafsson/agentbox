@@ -1,5 +1,33 @@
+use crate::model::WorldState;
 use cgmath::Vector3;
 use getset::CopyGetters;
+use std::sync::{atomic::AtomicUsize, Arc, Mutex};
+
+// Communication between the event loop and the simulation thread
+
+pub struct WorldChannel {
+    pub world: Mutex<Arc<WorldState>>,
+    pub version: AtomicUsize,
+}
+
+impl WorldChannel {
+    pub fn new() -> Self {
+        Self {
+            world: Mutex::new(Arc::new(WorldState::default())),
+            version: AtomicUsize::new(0),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum SimulationEvent {
+    RequestExit,
+    RequestHide,
+    RequestShow,
+    SimulationPanic,
+}
+
+// Structs that will be sent to the GPU
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, CopyGetters)]

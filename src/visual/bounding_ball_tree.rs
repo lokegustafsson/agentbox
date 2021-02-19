@@ -1,5 +1,5 @@
-use crate::solid_primitives::{Cuboid, Cylinder, Sphere};
-use cgmath::{prelude::*, Matrix4, Vector3, Vector4};
+use crate::common::{Cuboid, Cylinder, Sphere};
+use cgmath::{prelude::*, Vector3};
 use std::iter::repeat;
 
 /// Build a bounding ball hierarchy binary tree in `O(n^2)` where

@@ -1,5 +1,5 @@
 use crate::{
-    solid_primitives::{Cuboid, Cylinder, Sphere},
+    common::{Cuboid, Cylinder, Sphere},
     visual::{
         bounding_ball_tree::{self, Node},
         graphics::{PushConstants, PUSH_CONSTANT_RANGE},
@@ -150,7 +150,7 @@ impl SolidsRenderer {
 
 fn build_bind_group_and_pipeline(
     device: &Device,
-    bind_group_entries: &[BindGroupEntry],
+    bind_group_entries: &[BindGroupEntry<'_>],
 ) -> (BindGroup, RenderPipeline) {
     let bind_group_layout = build_bind_group_layout(device);
     let bind_group = device.create_bind_group(&BindGroupDescriptor {
