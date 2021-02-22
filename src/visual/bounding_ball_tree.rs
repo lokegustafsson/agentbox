@@ -124,11 +124,30 @@ impl Node {
     }
     // Takes a tuple as it will be produced by [Iterator::enumerate]
     pub(self) fn leaf_cylinder((index, cylinder): (usize, &Cylinder)) -> Self {
-        todo!()
+        let pos = (cylinder.face_a() + cylinder.face_b()) / 2.0;
+        let radius = (pos.distance2(cylinder.face_a()) + cylinder.radius().powi(2)).sqrt();
+        Self {
+            pos,
+            radius,
+            left: -2, // Kind: Cylinder => -2
+            right: index as u32,
+            _padding: [0; 2],
+        }
     }
     // Takes a tuple as it will be produced by [Iterator::enumerate]
     pub(self) fn leaf_cuboid((index, cuboid): (usize, &Cuboid)) -> Self {
-        todo!()
+        let axis_c = {
+            let axis = cuboid.axis_a().cross(cuboid.axis_b());
+            axis * cuboid.width() / axis.magnitude()
+        };
+        let diagonal = cuboid.axis_a() + cuboid.axis_b() + axis_c;
+        Self {
+            pos: cuboid.corner() + diagonal / 2.0,
+            radius: diagonal.magnitude() / 2.0,
+            left: -2, // Kind: Cylinder => -2
+            right: index as u32,
+            _padding: [0; 2],
+        }
     }
     pub(self) fn branch(a_index: usize, b_index: usize, nodes: &Vec<Option<Node>>) -> Self {
         let a = nodes[a_index].unwrap();

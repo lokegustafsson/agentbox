@@ -3,6 +3,7 @@ mod simple;
 
 use crate::common::{Cuboid, Cylinder, Sphere};
 
+pub use inverted_double_pendulum::InvertedDoublePendulum;
 pub use simple::SimpleModel;
 
 #[derive(Clone, Copy)]

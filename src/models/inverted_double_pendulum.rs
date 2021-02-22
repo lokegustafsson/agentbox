@@ -46,7 +46,8 @@ impl Model for InvertedDoublePendulum {
     }
 
     fn update(world: &mut Self::World, signals: &Self::Signals) {
-        todo!()
+        // Temporarily no-op
+        let todo_idp_update = (world, signals);
     }
 
     fn get_solids(world: &Self::World) -> (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>) {
