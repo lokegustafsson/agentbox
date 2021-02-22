@@ -1,93 +1,236 @@
 use anyhow::*;
-use glob::glob;
-use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
+use shaderc::{
+    CompileOptions, Compiler, IncludeType, OptimizationLevel, ResolvedInclude, ShaderKind,
+};
 use std::{
     collections::HashMap,
-    env::{self, set_current_dir},
-    fs,
-    path::PathBuf,
+    env, fs,
+    path::{Path, PathBuf},
 };
 
 fn main() -> Result<()> {
-    let root_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let src_dir = &root_dir.clone().join("src/");
-    let spirv_dir = &root_dir.join("target/");
+    let root_dir = &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let src_dir = &root_dir.join("src/");
+    let target_dir = &root_dir.join("target/");
 
-    // Find already compiled
-    set_current_dir(spirv_dir)?;
-    let mut compiled = CompiledShaders::load();
+    let mut checksums = ShaderChecksums::load_already_compiled(target_dir);
+    let (shaders, includees) = get_all_shaders(src_dir)?;
 
-    // Collect all shaders recursively within /src/ without prefix
-    set_current_dir(src_dir)?;
-    let shaders = vec![glob("**/*.vert")?, glob("**/*.frag")?, glob("**/*.comp")?]
-        .into_iter()
-        .flatten()
-        .map(|glob_result| ShaderData::load(glob_result?))
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .filter(|shader| compiled.has_new_checksum(shader))
-        .collect::<Vec<ShaderData>>();
-
-    // This can't be parallelized. The [shaderc::Compiler] is not thread safe.
-    set_current_dir(spirv_dir)?;
+    // Shaderc init
+    let compile_options = compiler_options(src_dir.clone(), includees)?;
     let mut compiler = Compiler::new().context("Unable to create shader compiler")?;
-    let mut compile_options =
-        CompileOptions::new().context("Unable to create shader compile options")?;
-    compile_options.set_optimization_level(OptimizationLevel::Performance);
 
-    for shader in shaders {
-        let name = shader.path.to_str().unwrap();
-        println!("cargo:warning=Compiling shader {}", name);
+    // Preprocess
+    let preprocessed_shaders = preprocess_shaders(shaders, &mut compiler, &compile_options)?;
 
-        let compiled = compiler.compile_into_spirv(
-            &shader.source,
-            shader.kind,
-            &name,
-            "main",
-            Some(&compile_options),
-        )?;
-        let extension = match shader.kind {
+    // Filter unchanged source files after preprocessing
+    let shaders_to_compile = preprocessed_shaders
+        .into_iter()
+        .filter(|shader| checksums.register_new(shader));
+
+    // Compile
+    for shader in shaders_to_compile {
+        println!("cargo:warning=Compiling shader {}", shader.path_name);
+
+        let compiled = compiler
+            .compile_into_spirv(
+                &shader.source,
+                shader.kind.unwrap(),
+                &shader.path_name,
+                "main",
+                Some(&compile_options),
+            )
+            .context("While compiling with shaderc")?;
+
+        let extension = match shader.kind.unwrap() {
             ShaderKind::Vertex => "vert",
             ShaderKind::Fragment => "frag",
             ShaderKind::Compute => "comp",
-            _ => panic!("Shader {:?} unsupported"),
+            _ => unreachable!(),
         };
+
+        fs::create_dir_all(target_dir.join(&shader.path_name))
+            .with_context(|| format!("While creating shader directory {:?}", &shader.path_name))?;
+
         fs::write(
-            shader.path.with_extension(format!("{}.spv", extension)),
+            target_dir
+                .join(&shader.path_name)
+                .with_extension(format!("{}.spv", extension)),
             compiled.as_binary_u8(),
-        )?;
+        )
+        .with_context(|| {
+            format!(
+                "While writing the compiled shader to {:?}",
+                target_dir.join(&shader.path_name)
+            )
+        })?;
     }
 
     // Remember compiled
-    compiled.store();
+    checksums.write_file(target_dir);
     Ok(())
 }
 
-struct ShaderData {
-    source: String,
-    path: PathBuf,
-    kind: ShaderKind,
+fn preprocess_shaders(
+    shaders: Vec<ShaderSource>,
+    compiler: &mut Compiler,
+    options: &CompileOptions,
+) -> Result<Vec<ShaderSource>> {
+    shaders
+        .into_iter()
+        .map(|shader| {
+            Ok(ShaderSource {
+                source: compiler
+                    .preprocess(&shader.source, &shader.path_name, "main", Some(&options))?
+                    .as_text(),
+                path_name: shader.path_name,
+                kind: shader.kind,
+            })
+        })
+        .collect()
 }
 
-impl ShaderData {
-    pub fn load(path: PathBuf) -> Result<Self> {
-        assert!(path.is_relative());
+fn compiler_options<'a>(
+    src_dir: PathBuf,
+    include_map: HashMap<String, String>,
+) -> Result<CompileOptions<'a>> {
+    let mut options = CompileOptions::new().context("While creating shader compile options")?;
+    options.set_optimization_level(OptimizationLevel::Performance);
+    options.set_warnings_as_errors();
+    options.set_include_callback(move |to, kind, from, depth| {
+        include_callback(&src_dir, &include_map, to, kind, from, depth)
+    });
+    return Ok(options);
+
+    fn include_callback(
+        src_dir: &Path,
+        include_map: &HashMap<String, String>,
+        to_include: &str,
+        include_type: IncludeType,
+        from_include: &str,
+        depth: usize,
+    ) -> Result<ResolvedInclude, String> {
+        if depth >= 100 {
+            return Err(format!("Bailing due to high include depth (= {})", depth));
+        }
+        let resolved_name = match include_type {
+            IncludeType::Standard => String::from(to_include),
+
+            IncludeType::Relative => {
+                let target_path = src_dir
+                    .join(from_include)
+                    .parent()
+                    .unwrap()
+                    .join(to_include);
+
+                match target_path.canonicalize() {
+                    Ok(target) => {
+                        String::from(target.strip_prefix(src_dir).unwrap().to_str().unwrap())
+                    }
+
+                    Err(ioerror) => {
+                        return Err(format!(
+                            "Cannot canonicalize path {:?}: {}",
+                            target_path, ioerror
+                        ))
+                    }
+                }
+            }
+        };
+        if let Some(content) = include_map.get(&resolved_name) {
+            Ok(ResolvedInclude {
+                resolved_name,
+                content: content.clone(),
+            })
+        } else {
+            Err(format!(
+                "Could not find .glsl file at {} relative to src/",
+                resolved_name
+            ))
+        }
+    }
+}
+
+fn get_all_shaders(src_dir: &Path) -> Result<(Vec<ShaderSource>, HashMap<String, String>)> {
+    assert!(src_dir.is_absolute());
+    assert!(src_dir.is_dir());
+
+    // [glob::glob] takes a [&str], so we need to change working directory to deal with possible
+    // invalid unicode in a parent directory of the repo.
+    env::set_current_dir(src_dir)?;
+    let paths: Vec<glob::Paths> = ["**/*.vert", "**/*.frag", "**/*.comp", "**/*.glsl"]
+        .as_ref()
+        .into_iter()
+        .map(|glob_str| glob::glob(glob_str).context("Globbing for shaders"))
+        .collect::<Result<_>>()?;
+
+    let files: Vec<ShaderSource> = paths
+        .into_iter()
+        .flatten()
+        .map(|glob_result| {
+            let absolute_path = src_dir.join(glob_result?);
+            ShaderSource::load(absolute_path, src_dir)
+        })
+        .collect::<Result<_>>()?;
+
+    let (shaders, includees): (_, Vec<_>) = files.into_iter().partition(ShaderSource::is_top_level);
+
+    let includees = includees
+        .into_iter()
+        .map(|source| source.include_pair().unwrap())
+        .collect();
+
+    return Ok((shaders, includees));
+}
+
+struct ShaderSource {
+    source: String,
+    path_name: String, // Relative to src (and after compilation, target) dir
+    kind: Option<ShaderKind>,
+}
+
+impl ShaderSource {
+    pub fn load(path: PathBuf, src_dir: &Path) -> Result<Self> {
+        assert!(path.is_absolute());
         assert!(path.is_file());
+        assert!(src_dir.is_absolute());
+        assert!(src_dir.is_dir());
 
         let extension = path
             .extension()
-            .context("File has no extension")?
+            .context("Getting shader file extension")?
             .to_str()
-            .context("Extension cannot be converted to &str")?;
+            .context("Getting shader file extension")?;
         let kind = match extension {
-            "vert" => ShaderKind::Vertex,
-            "frag" => ShaderKind::Fragment,
-            "comp" => ShaderKind::Compute,
+            "vert" => Some(ShaderKind::Vertex),
+            "frag" => Some(ShaderKind::Fragment),
+            "comp" => Some(ShaderKind::Compute),
+            "glsl" => None,
             _ => bail!("Unsupported shader: {}", path.display()),
         };
 
-        let source = fs::read_to_string(path.clone())?;
-        Ok(Self { source, path, kind })
+        let source = fs::read_to_string(&path)?;
+        let path_name = path
+            .strip_prefix(src_dir)
+            .context("Shaders must be in src/")?
+            .to_str()
+            .context("Relative paths within the repo must be valid unicode")?
+            .to_string();
+        Ok(Self {
+            source,
+            path_name,
+            kind,
+        })
+    }
+    pub fn is_top_level(&self) -> bool {
+        self.kind.is_some()
+    }
+    pub fn include_pair(self) -> Option<(String, String)> {
+        if self.kind.is_none() {
+            Some((self.path_name, self.source))
+        } else {
+            None
+        }
     }
 }
 
@@ -100,42 +243,48 @@ shader.frag bf009481bd9bb7650dcdf903fafc896c
 shader.vert 04181d9dc9d21e07dded377e96e6e61b
 ```
 */
-struct CompiledShaders(HashMap<PathBuf, String>);
+// Tuples (path relative to target dir, md5 digest)
+struct ShaderChecksums(HashMap<String, String>);
 
-impl CompiledShaders {
-    fn load() -> Self {
-        let entries = match fs::read_to_string("shader_checksums.txt") {
+impl ShaderChecksums {
+    fn load_already_compiled(target_dir: &Path) -> Self {
+        assert!(target_dir.is_absolute());
+        assert!(target_dir.is_dir());
+
+        let entries = match fs::read_to_string(target_dir.join("shader_checksums.txt")) {
             Ok(entries) => entries,
-            Err(_) => return Self(Default::default()),
+            Err(_) => return Self(HashMap::default()),
         };
         Self(
             entries
                 .split('\n')
                 .map(|line| {
                     let mut words = line.split(' ');
-                    Some((PathBuf::from(words.nth(0)?), String::from(words.nth(0)?)))
+                    Some((String::from(words.nth(0)?), String::from(words.nth(0)?)))
                 })
-                .filter(Option::is_some)
-                .map(Option::unwrap)
-                .collect(),
+                .collect::<Option<HashMap<String, String>>>()
+                .unwrap_or(HashMap::default()),
         )
     }
-    pub fn store(self) {
+    pub fn write_file(self, target_dir: &Path) {
+        assert!(target_dir.is_absolute());
+        assert!(target_dir.is_dir());
+
         let entries: Vec<String> = self
             .0
             .into_iter()
-            .map(|(path, digest)| format!("{} {}", path.to_str().unwrap(), digest))
+            .map(|(path, digest)| format!("{} {}", path, digest))
             .collect();
-        fs::write("shader_checksums.txt", &entries.join("\n")).unwrap();
+        fs::write(target_dir.join("shader_checksums.txt"), &entries.join("\n")).unwrap();
     }
-    pub fn has_new_checksum(&mut self, shader: &ShaderData) -> bool {
+    pub fn register_new(&mut self, shader: &ShaderSource) -> bool {
         let digest = format!("{:?}", md5::compute(&shader.source));
-        if let Some(old_digest) = self.0.get(&shader.path) {
+        if let Some(old_digest) = self.0.get(&shader.path_name) {
             if *old_digest == digest {
                 return false;
             }
         }
-        self.0.insert(shader.path.clone(), digest);
+        self.0.insert(shader.path_name.clone(), digest);
         return true;
     }
 }
