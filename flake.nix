@@ -18,6 +18,8 @@
           xorg.libXcursor
           xorg.libXrandr
           xorg.libXi
+          # Cargo subcommands
+          cargo-outdated
         ];
         SHADERC_LIB_DIR = "${nixpkgs.lib.getLib pkgs.shaderc}/lib";
         LD_LIBRARY_PATH = "${pkgs.vulkan-loader}/lib";

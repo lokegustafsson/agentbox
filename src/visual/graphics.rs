@@ -93,6 +93,7 @@ impl Graphics {
                 });
             {
                 let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("The render pass"),
                     color_attachments: &[RenderPassColorAttachmentDescriptor {
                         attachment: &swap_chain_frame.output.view,
                         resolve_target: None,
@@ -115,7 +116,7 @@ fn build_swap_chain(device: &Device, surface: &Surface, (width, height): (u32, u
     device.create_swap_chain(
         surface,
         &SwapChainDescriptor {
-            usage: TextureUsage::OUTPUT_ATTACHMENT,
+            usage: TextureUsage::RENDER_ATTACHMENT,
             format: TEXTURE_FORMAT,
             width,
             height,
@@ -138,12 +139,12 @@ async fn build_device_and_queue(adapter: &Adapter) -> Result<(Device, Queue)> {
     adapter
         .request_device(
             &DeviceDescriptor {
+                label: Some("The device"),
                 features: Features::PUSH_CONSTANTS,
                 limits: Limits {
                     max_push_constant_size: mem::size_of::<PushConstants>() as u32,
                     ..Limits::default()
                 },
-                shader_validation: true,
             },
             None, // Trace path
         )

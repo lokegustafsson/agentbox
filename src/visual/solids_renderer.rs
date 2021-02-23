@@ -7,7 +7,7 @@ use crate::{
     SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
 };
 use std::mem;
-use wgpu::{util::make_spirv, *};
+use wgpu::*;
 
 const TEXTURE_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
 const NO_OFFSET: u64 = 0;
@@ -55,19 +55,35 @@ impl SolidsRenderer {
         let bind_group_entries = &[
             BindGroupEntry {
                 binding: 0,
-                resource: BindingResource::Buffer(tree_buffer.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &tree_buffer,
+                    offset: NO_OFFSET,
+                    size: None,
+                },
             },
             BindGroupEntry {
                 binding: 1,
-                resource: BindingResource::Buffer(sphere_buffer.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &sphere_buffer,
+                    offset: NO_OFFSET,
+                    size: None,
+                },
             },
             BindGroupEntry {
                 binding: 2,
-                resource: BindingResource::Buffer(cylinder_buffer.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &cylinder_buffer,
+                    offset: NO_OFFSET,
+                    size: None,
+                },
             },
             BindGroupEntry {
                 binding: 3,
-                resource: BindingResource::Buffer(cuboid_buffer.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &cuboid_buffer,
+                    offset: NO_OFFSET,
+                    size: None,
+                },
             },
         ];
 
@@ -175,10 +191,10 @@ fn build_bind_group_layout(device: &Device) -> BindGroupLayout {
         BindGroupLayoutEntry {
             binding: i,
             visibility: ShaderStage::FRAGMENT,
-            ty: BindingType::StorageBuffer {
-                dynamic: false,         // Dynamic offset
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
                 min_binding_size: None, // TODO Revisit when I understand
-                readonly: true,
             },
             count: None, // Only applicable to sampled textures
         }
@@ -192,36 +208,48 @@ fn build_pipeline(device: &Device, bind_group_layout: &BindGroupLayout) -> Rende
         push_constant_ranges: &[PUSH_CONSTANT_RANGE],
     });
 
-    let vertex_module = device.create_shader_module(make_spirv(WHOLECANVAS_VERTEX));
-    let fragment_module = device.create_shader_module(make_spirv(SOLIDS_FRAGMENT));
+    let vertex_module = device.create_shader_module(&ShaderModuleDescriptor {
+        label: Some("The wholecanvas vertex shader created in the solids renderer"),
+        source: util::make_spirv(WHOLECANVAS_VERTEX),
+        flags: ShaderFlags::VALIDATION,
+    });
+    let fragment_module = device.create_shader_module(&ShaderModuleDescriptor {
+        label: Some("The solids fragment shader created in the solids renderer"),
+        source: util::make_spirv(SOLIDS_FRAGMENT),
+        flags: ShaderFlags::VALIDATION,
+    });
 
     device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("The SolidsRenderer pipeline"),
         layout: Some(&pipeline_layout),
-        vertex_stage: ProgrammableStageDescriptor {
+        vertex: VertexState {
             module: &vertex_module,
             entry_point: "main",
+            buffers: &[],
         },
-        fragment_stage: Some(ProgrammableStageDescriptor {
+        fragment: Some(FragmentState {
             module: &fragment_module,
             entry_point: "main",
+            targets: &[ColorTargetState {
+                format: TEXTURE_FORMAT,
+                alpha_blend: BlendState::REPLACE,
+                color_blend: BlendState::REPLACE,
+                write_mask: ColorWrite::ALL,
+            }],
         }),
-        rasterization_state: None, // Default I guess?
-        // Required for WHOLECANVAS_VERT_SPIRV to cover the entire viewport
-        primitive_topology: PrimitiveTopology::TriangleStrip,
-        color_states: &[ColorStateDescriptor {
-            format: TEXTURE_FORMAT,
-            alpha_blend: BlendDescriptor::REPLACE,
-            color_blend: BlendDescriptor::REPLACE,
-            write_mask: ColorWrite::ALL,
-        }],
-        depth_stencil_state: None,
-        vertex_state: VertexStateDescriptor {
-            index_format: IndexFormat::Uint16,
-            vertex_buffers: &[],
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleStrip,
+            strip_index_format: None,  // Fine? We do not use index buffers
+            front_face: FrontFace::Cw, // Not used since we do not cull
+            cull_mode: CullMode::None,
+            polygon_mode: PolygonMode::Fill,
         },
-        sample_count: 1,
-        sample_mask: !0,
-        alpha_to_coverage_enabled: false,
+        depth_stencil: None,
+        multisample: MultisampleState {
+            // No multisampling
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
     })
 }

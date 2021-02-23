@@ -10,19 +10,18 @@ edition = "2018"
 anyhow = "1.0"
 async-std = "1.7"
 bytemuck = "1.4"
-cgmath = "0.17"
+cgmath = "0.18"
 getset = "0.1"
 log = "0.4"
-rand = "0.7"
-wgpu = "0.6"
-winit = "0.23"
+wgpu = "0.7"
+winit = "0.24"
 
 [build-dependencies]
 anyhow = "1.0"
 async-std = "1.7"
 glob = "0.3"
 md5 = "0.7"
-shaderc = "0.6"
+shaderc = "0.7"
 
 [dev-dependencies]
 env_logger = "0.8"
