@@ -1,14 +1,14 @@
-use cgmath::Vector3;
-use combat::{
+use agentbox::{
     self,
     models::{SimpleModel, Status},
 };
+use cgmath::Vector3;
 use std::{thread, time::Duration};
 
 fn main() {
     env_logger::init();
 
-    combat::run_with::<SimpleModel, _>(Status::VISUAL, move |world, signals, _status| {
+    agentbox::run_with::<SimpleModel, _>(Status::VISUAL, move |world, signals, _status| {
         signals.accel = Vector3::unit_z() * 0.01;
 
         signals.target_color = if world.color.x > 0.6 {

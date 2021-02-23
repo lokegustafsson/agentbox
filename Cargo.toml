@@ -1,5 +1,5 @@
 [package]
-name = "combat"
+name = "agentbox"
 version = "0.1.0"
 authors = ["Loke Gustafsson <lokegustafsson@pm.me>"]
 edition = "2018"
