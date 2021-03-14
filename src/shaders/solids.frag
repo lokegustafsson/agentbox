@@ -197,8 +197,8 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
 
 float hit_time_ball(const vec3 from, const vec3 ray, const uint index) {
     const vec3 rel_from = from - ball_tree[index].pos;
-    const vec3 rel_ray = ray / ball_tree[index].radius;
-    return hit_time_unit_sphere(rel_from, rel_ray);
+    const float scale = 1 / ball_tree[index].radius;
+    return hit_time_unit_sphere(rel_from * scale, ray * scale);
 }
 
 float hit_time_solid(const vec3 from, const vec3 ray, const mat4 solid) {

@@ -1,5 +1,5 @@
 use crate::models::Model;
-use cgmath::{prelude::*, Matrix3, Matrix4, Point3, Vector3, Vector4};
+use cgmath::{prelude::*, Matrix3, Matrix4, Vector3, Vector4};
 use std::sync::{atomic::AtomicUsize, Arc, Mutex};
 
 // Communication between the event loop and the simulation thread
@@ -168,7 +168,7 @@ mod test {
     fn properly_bound_sphere(pos: Vector3<f32>, radius: f32) {
         let inner = Solid::new_sphere(pos, radius, Vector3::unit_x());
         let (bound_pos, bound_radius) = inner.bounding_sphere();
-        cgmath::assert_abs_diff_eq!(bound_pos, pos);
+        cgmath::assert_relative_eq!(bound_pos, pos);
         assert!(bound_radius >= radius);
     }
 
@@ -187,5 +187,13 @@ mod test {
     #[test]
     fn properly_bound_sphere_elsewhere_small() {
         properly_bound_sphere(Vector3::unit_x(), 1.0 / 123.0);
+    }
+    #[test]
+    fn properly_bound_sphere_elsewhere_1() {
+        properly_bound_sphere(2.3f32 * Vector3::unit_x(), 1.0);
+    }
+    #[test]
+    fn properly_bound_sphere_elsewhere_large() {
+        properly_bound_sphere(100.0f32 * Vector3::unit_x(), 123.0);
     }
 }

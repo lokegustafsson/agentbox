@@ -83,13 +83,8 @@ pub fn build_tree(solids: &[Solid]) -> Vec<Node> {
 // satisfied with an approximate tree
 fn metric(a: &Node, b: &Node) -> f32 {
     let joined_radius = ((a.pos - b.pos).magnitude() + a.radius + b.radius) / 2.0;
-    // We return the increase in total volume after a join
-    let res = joined_radius.powi(3) - a.radius.powi(3) - b.radius.powi(3);
-    if res.is_nan() {
-        panic!("Bad nodes: {:?}, {:?}", a, b)
-    } else {
-        res
-    }
+    // We return the increase in total volume (up to a constant factor) after a join
+    joined_radius.powi(3) - a.radius.powi(3) - b.radius.powi(3)
 }
 
 #[repr(C)]

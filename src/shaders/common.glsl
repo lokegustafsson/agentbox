@@ -17,9 +17,9 @@ struct BoundingBallNode {
     int _padding2;
 };
 
-// Solids are sent from the GPU as mat4. Since every mat4 expressing a 3d transformation in
-// homogenous coordinates leaves the last row as (0, 0, 0, 1), we have 4 spare floats of space for
-// other data. There we fit color as a vec3 and a float-enum indicating sphere, cylinder or cube.
+// Solids are sent to the GPU as mat4. Since every mat4 expressing a 3d transformation in homogenous
+// coordinates leaves the last row as (0, 0, 0, 1), we have 4 spare floats of space for other data.
+// There we fit color as a vec3 and a float-enum indicating sphere, cylinder or cube.
 // [--- --- --- ---
 //  --- matrix  ---
 //  --- --- --- ---
