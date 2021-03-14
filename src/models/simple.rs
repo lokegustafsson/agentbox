@@ -1,7 +1,4 @@
-use crate::{
-    common::{Cuboid, Cylinder, Sphere},
-    models::Model,
-};
+use crate::{common::Solid, models::Model};
 use cgmath::{prelude::*, Vector3};
 
 #[derive(Clone)]
@@ -44,12 +41,8 @@ impl Model for SimpleModel {
         world.color = (1.0 - dt) * world.color + dt * signals.target_color;
     }
 
-    fn get_solids(world: &Self::World) -> (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>) {
+    fn get_solids(world: &Self::World) -> Vec<Solid> {
         const RADIUS: f32 = 1.0;
-        (
-            vec![Sphere::new(world.pos, RADIUS, world.color)],
-            Vec::new(),
-            Vec::new(),
-        )
+        vec![Solid::new_sphere(world.pos, RADIUS, world.color)]
     }
 }

@@ -1,7 +1,7 @@
 mod inverted_double_pendulum;
 mod simple;
 
-use crate::common::{Cuboid, Cylinder, Sphere};
+use crate::common::Solid;
 
 pub use inverted_double_pendulum::InvertedDoublePendulum;
 pub use simple::SimpleModel;
@@ -36,5 +36,5 @@ pub trait Model {
 
     fn update(world: &mut Self::World, signals: &Self::Signals);
 
-    fn get_solids(world: &Self::World) -> (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>);
+    fn get_solids(world: &Self::World) -> Vec<Solid>;
 }

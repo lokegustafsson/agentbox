@@ -1,7 +1,4 @@
-use crate::{
-    common::{Cuboid, Cylinder, Sphere},
-    models::Model,
-};
+use crate::{common::Solid, models::Model};
 use cgmath::{prelude::*, Vector2, Vector3};
 
 #[derive(Clone)]
@@ -50,7 +47,7 @@ impl Model for InvertedDoublePendulum {
         let todo_idp_update = (world, signals);
     }
 
-    fn get_solids(world: &Self::World) -> (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>) {
+    fn get_solids(world: &Self::World) -> Vec<Solid> {
         const CONTROL_COLOR: Vector3<f32> = Vector3::new(0.0, 0.5, 0.3);
         const NODE_COLOR: Vector3<f32> = Vector3::new(0.5, 0.2, 0.3);
         const ROD_COLOR: Vector3<f32> = Vector3::new(0.0, 0.3, 0.6);
@@ -58,22 +55,17 @@ impl Model for InvertedDoublePendulum {
         const NODE_RADIUS: f32 = 0.15;
         const ROD_RADIUS: f32 = 0.1;
 
-        (
-            vec![
-                Sphere::new(world.bottom_pos.extend(0.0), NODE_RADIUS, CONTROL_COLOR),
-                Sphere::new(world.middle_pos, NODE_RADIUS, NODE_COLOR),
-                Sphere::new(world.top_pos, NODE_RADIUS, NODE_COLOR),
-            ],
-            vec![
-                Cylinder::new(
-                    world.bottom_pos.extend(0.0),
-                    world.middle_pos,
-                    ROD_RADIUS,
-                    ROD_COLOR,
-                ),
-                Cylinder::new(world.middle_pos, world.top_pos, ROD_RADIUS, ROD_COLOR),
-            ],
-            Vec::new(),
-        )
+        vec![
+            Solid::new_sphere(world.bottom_pos.extend(0.0), NODE_RADIUS, CONTROL_COLOR),
+            Solid::new_sphere(world.middle_pos, NODE_RADIUS, NODE_COLOR),
+            Solid::new_sphere(world.top_pos, NODE_RADIUS, NODE_COLOR),
+            /*Solid::new_cylinder(
+                world.bottom_pos.extend(0.0),
+                world.middle_pos,
+                ROD_RADIUS,
+                ROD_COLOR,
+            ),
+            Solid::new_cylinder(world.middle_pos, world.top_pos, ROD_RADIUS, ROD_COLOR),*/
+        ]
     }
 }

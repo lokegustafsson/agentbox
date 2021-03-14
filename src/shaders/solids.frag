@@ -2,13 +2,10 @@
 #include "common.glsl"
 #include "geometry.glsl"
 
-// Spheres, cylinders, rectangular cuboids
-
 // Internal structs
 struct hit_report {
     vec3 pos;
     vec3 normal;
-    uint kind;
     uint index;
 };
 struct rays {
@@ -20,7 +17,7 @@ struct rays {
 
 
 // Constants ===
-const int STACK_SIZE = 100;
+const uint STACK_SIZE = 100;
 const uint ERROR_NONE = 0;
 const uint ERROR_OTHER = 1;
 const uint ERROR_INVALID_KIND = 2;
@@ -30,15 +27,11 @@ const uint ERROR_INVALID_PUSH_CONSTANTS = 5;
 
 const vec4 TRANSPARENT = vec4(0);
 
-const uint NO_HIT_KIND = 0;
-const uint SPHERE_KIND = 1;
-const uint CYLINDER_KIND = 2;
-const uint CUBOID_KIND = 3;
-
+const float INITIAL_HIT_TIME_BOUND = 1e9;
+const vec3 NO_HIT_NORMAL = vec3(0);
 const float EPSILON = 0.01;
 
-//const vec3 AMBIENT = vec3(0.08);
-const vec3 AMBIENT = vec3(1);
+const vec3 AMBIENT = vec3(0.08);
 const vec3 SUN_COLOR = vec3(1);
 const float SUN_SIZE = 1e-2;
 const vec3 SUN_DIRECTION = vec3(0, 1, 0);
@@ -57,22 +50,19 @@ layout(push_constant) uniform PushConstants {
     vec2 window_size;
 };
 layout(set=0, binding=0) readonly buffer BoundingBallTree {
-    BoundingBallNode solids_tree[];
+    BoundingBallNode ball_tree[];
 };
-layout(set=0, binding=1) readonly buffer Spheres {
-    Sphere spheres[];
-};
-layout(set=0, binding=2) readonly buffer Cylinders {
-    Cylinder cylinders[];
-};
-layout(set=0, binding=3) readonly buffer Cuboids {
-    Cuboid cuboids[];
+layout(set=0, binding=1) readonly buffer Solids {
+    mat4 solids[];
 };
 
 // Forward function declarations ===
 vec4 simple_ray(const vec3, const vec3);
 vec3 background_light(const vec3);
 hit_report cast_ray(const vec3, const vec3);
+float hit_time_ball(const vec3, const vec3, const uint);
+float hit_time_solid(const vec3, const vec3, const mat4);
+vec3 solid_normal(const vec3, const mat4);
 hit_report no_hit_report();
 
 void main() {
@@ -81,15 +71,14 @@ void main() {
     const vec3 camera_space_ray = normalize(vec3(frag_pos - mid_frag_pos, 1));
 
     const vec4 camera_pos = camera_to_world * vec4(vec3(0), 1);
-    const vec4 camera_ray = camera_to_world * vec4(camera_space_ray, 0); // 0 => not translated
+    // w = 0 => not translated by transformation
+    const vec4 camera_ray = camera_to_world * vec4(camera_space_ray, 0);
 
-    const uint num_bodies = spheres.length() + cylinders.length() + cuboids.length();
-    const bool invalid_buffers = solids_tree.length() != 2 * num_bodies - 1;
     const bool invalid_push_constants = any(isinf(window_size))
         || any(isnan(window_size))
         || any(lessThanEqual(window_size, vec2(0)));
 
-    if (invalid_buffers) {
+    if (ball_tree.length() != 2 * solids.length() - 1) {
         fatal_error = ERROR_INVALID_BUFFER_SIZES;
     } else if (invalid_push_constants) {
         fatal_error = ERROR_INVALID_PUSH_CONSTANTS;
@@ -119,33 +108,20 @@ void main() {
     }
 }
 
-// Casts a ray using Blinn-Phong illumination
+// Cast a ray using Blinn-Phong illumination
 vec4 simple_ray(const vec3 from, const vec3 ray) {
     hit_report hit = cast_ray(from, ray);
-    if (hit.kind == NO_HIT_KIND) {
+    // No hit normal => no hit
+    if (hit.normal == NO_HIT_NORMAL) {
         return TRANSPARENT;
     }
-    const vec3 normal = hit.normal;
     const vec3 hit_point = hit.pos;
-    vec3 color;
-    switch (hit.kind) {
-        case SPHERE_KIND:
-            color = spheres[hit.index].color;
-            break;
-        case CYLINDER_KIND:
-            color = cylinders[hit.index].color;
-            break;
-        case CUBOID_KIND:
-            color = cuboids[hit.index].color;
-            break;
-        default:
-            fatal_error = ERROR_INVALID_KIND;
-            return vec4(0);
-    }
+    const vec3 normal = hit.normal;
+    vec3 color = solid_get_color(solids[hit.index]);
 
     // Ambient
     vec3 light = AMBIENT * color;
-    if (cast_ray(hit_point + EPSILON * SUN_DIRECTION, SUN_DIRECTION).kind == NO_HIT_KIND) {
+    if (cast_ray(hit_point + EPSILON * SUN_DIRECTION, SUN_DIRECTION).normal == NO_HIT_NORMAL) {
         const float alignment = dot(normal, normalize(SUN_DIRECTION - ray));
         // Diffuse
         light += color * SUN_COLOR * alignment;
@@ -155,61 +131,39 @@ vec4 simple_ray(const vec3 from, const vec3 ray) {
     return vec4(light, 1);
 }
 
-// Cast a ray by traversing [solids_tree]. Will set [fatal_error] on overflow
+// Cast a ray by traversing [ball_tree].
 hit_report cast_ray(const vec3 from, const vec3 ray) {
     uint stack[STACK_SIZE];
     int stack_ptr = -1;
 
     const int root = 0; // See bounding_ball_tree.rs
-    if (hit_time_node(from, ray, solids_tree[root]) > 0) {
+    if (hit_time_ball(from, ray, root) > 0) {
         stack[++stack_ptr] = root;
-
-        // TRACE (maybe hit something)
-        //fatal_error = ERROR_OTHER;
-        //return no_hit_report();
-        // TRACE
     }
-    float first_hit_time = 1e9;
-    uint first_hit_kind = NO_HIT_KIND;
+    float first_hit_time = INITIAL_HIT_TIME_BOUND;
     uint first_hit_index = 0;
     while (stack_ptr >= 0) {
         const uint hit = stack[stack_ptr--];
-        if (solids_tree[hit].left < 0) {
+        if (ball_tree[hit].right == LEAF_NODE) {
             // Hit leaf
-            const int kind = -solids_tree[hit].left;
-            const int index = solids_tree[hit].right;
-            float time;
-            switch (kind) {
-                case SPHERE_KIND:
-                    time = hit_time_sphere(from, ray, spheres[index]);
-                    break;
-                case CYLINDER_KIND:
-                    time = hit_time_cylinder(from, ray, cylinders[index]);
-                    break;
-                case CUBOID_KIND:
-                    time = hit_time_cuboid(from, ray, cuboids[index]);
-                    break;
-                default:
-                    fatal_error = ERROR_INVALID_KIND;
-                    return no_hit_report();
-            }
+            const uint index = ball_tree[hit].left;
+            float time = hit_time_solid(from, ray, solids[index]);
             if (time > 0 && time < first_hit_time) {
                 first_hit_time = time;
-                first_hit_kind = kind;
                 first_hit_index = index;
             }
         } else {
             // Continue traversal down
-            int left = solids_tree[hit].left;
-            int right = solids_tree[hit].right;
-            float l_hit = hit_time_node(from, ray, solids_tree[left]);
-            float r_hit = hit_time_node(from, ray, solids_tree[right]);
+            uint left = ball_tree[hit].left;
+            uint right = ball_tree[hit].right;
+            float l_hit = hit_time_ball(from, ray, left);
+            float r_hit = hit_time_ball(from, ray, right);
             if (r_hit < l_hit) {
                 float tmpf = l_hit;
                 l_hit = r_hit;
                 r_hit = tmpf;
 
-                int tmpi = left;
+                uint tmpi = left;
                 left = right;
                 right = tmpi;
             }
@@ -229,32 +183,67 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
             }
         }
     }
-    const vec3 hit_pos = from + ray * first_hit_time;
-    vec3 normal;
-    switch (first_hit_kind) {
-        case NO_HIT_KIND:
-            return no_hit_report();
+    if (first_hit_time == INITIAL_HIT_TIME_BOUND) {
+        return no_hit_report();
+    } else {
+        const vec3 hit_pos = from + ray * first_hit_time;
+        return hit_report(
+            hit_pos,
+            solid_normal(hit_pos, solids[first_hit_index]),
+            first_hit_index
+        );
+    }
+}
+
+float hit_time_ball(const vec3 from, const vec3 ray, const uint index) {
+    const vec3 rel_from = from - ball_tree[index].pos;
+    const vec3 rel_ray = ray / ball_tree[index].radius;
+    return hit_time_unit_sphere(rel_from, rel_ray);
+}
+
+float hit_time_solid(const vec3 from, const vec3 ray, const mat4 solid) {
+    const mat4 to_local = solid_get_world_to_local(solid);
+
+    const vec3 local_from = (to_local * vec4(from, 1)).xyz;
+    // w = 0 => not translated by transformation
+    const vec3 local_ray = (to_local * vec4(ray, 0)).xyz;
+
+    switch (solid_get_kind(solid)) {
         case SPHERE_KIND:
-            normal = normalize(hit_pos - spheres[first_hit_index].pos);
+            return hit_time_unit_sphere(local_from, local_ray);
+        case CYLINDER_KIND:
+            return hit_time_unit_cylinder(local_from, local_ray);
+        case CUBE_KIND:
+            return hit_time_unit_cube(local_from, local_ray);
+        default:
+            fatal_error = ERROR_INVALID_KIND;
+            return -1;
+    }
+}
+
+vec3 solid_normal(const vec3 hit_pos, const mat4 solid) {
+    const mat4 to_local = solid_get_world_to_local(solid);
+    const vec3 pos = (to_local * vec4(hit_pos, 1)).xyz;
+
+    vec3 normal;
+    switch (solid_get_kind(solid)) {
+        case SPHERE_KIND:
+            normal = normal_unit_sphere(pos);
             break;
         case CYLINDER_KIND:
-            normal = cylinder_normal(hit_pos, cylinders[first_hit_index]);
+            normal = normal_unit_cylinder(pos);
             break;
-        case CUBOID_KIND:
-            normal = cuboid_normal(hit_pos, cuboids[first_hit_index]);
+        case CUBE_KIND:
+            normal = normal_unit_cube(pos);
             break;
         default:
             fatal_error = ERROR_INVALID_KIND;
-            return no_hit_report();
+            return NO_HIT_NORMAL;
     }
-    return hit_report(
-        hit_pos,
-        normal,
-        first_hit_kind,
-        first_hit_index
-    );
+    // FIXME Is inverting here a bottleneck?
+    return (inverse(to_local) * vec4(normal, 0)).xyz;
 }
 
 hit_report no_hit_report() {
-    return hit_report(vec3(0), vec3(0), NO_HIT_KIND, 0);
+    return hit_report(vec3(0), NO_HIT_NORMAL, 0);
 }

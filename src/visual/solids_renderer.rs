@@ -1,5 +1,5 @@
 use crate::{
-    common::{Cuboid, Cylinder, Sphere},
+    common::Solid,
     visual::{
         bounding_ball_tree::{self, Node},
         graphics::{PushConstants, PUSH_CONSTANT_RANGE},
@@ -12,20 +12,13 @@ use wgpu::*;
 const TEXTURE_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
 const NO_OFFSET: u64 = 0;
 
-const MAX_SPHERES: u64 = 100;
-const MAX_CYLINDERS: u64 = 100;
-const MAX_CUBOIDS: u64 = 100;
-const MAX_SOLIDS: u64 = MAX_SPHERES + MAX_CYLINDERS + MAX_CUBOIDS;
+const MAX_SOLIDS: u64 = 100;
 
 pub struct SolidsRenderer {
-    spheres: Vec<Sphere>,
-    cylinders: Vec<Cylinder>,
-    cuboids: Vec<Cuboid>,
+    solids: Vec<Solid>,
     tree: Vec<Node>,
 
-    sphere_buffer: Buffer,
-    cylinder_buffer: Buffer,
-    cuboid_buffer: Buffer,
+    solids_buffer: Buffer,
     tree_buffer: Buffer,
 
     pipeline: RenderPipeline,
@@ -44,10 +37,7 @@ fn create_buffer<T: bytemuck::Pod>(device: &Device, label: &str, size: u64) -> B
 impl SolidsRenderer {
     pub fn new(device: &Device) -> Self {
         // Buffers
-        let sphere_buffer = create_buffer::<Sphere>(device, "The sphere buffer", MAX_SPHERES);
-        let cylinder_buffer =
-            create_buffer::<Cylinder>(device, "The cylinder buffer", MAX_CYLINDERS);
-        let cuboid_buffer = create_buffer::<Cuboid>(device, "The cuboid buffer", MAX_CUBOIDS);
+        let solids_buffer = create_buffer::<Solid>(device, "The solids buffer", MAX_SOLIDS);
         let tree_buffer =
             create_buffer::<Node>(device, "The bounding ball tree buffer", 2 * MAX_SOLIDS - 1);
 
@@ -64,23 +54,7 @@ impl SolidsRenderer {
             BindGroupEntry {
                 binding: 1,
                 resource: BindingResource::Buffer {
-                    buffer: &sphere_buffer,
-                    offset: NO_OFFSET,
-                    size: None,
-                },
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: BindingResource::Buffer {
-                    buffer: &cylinder_buffer,
-                    offset: NO_OFFSET,
-                    size: None,
-                },
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: BindingResource::Buffer {
-                    buffer: &cuboid_buffer,
+                    buffer: &solids_buffer,
                     offset: NO_OFFSET,
                     size: None,
                 },
@@ -90,62 +64,37 @@ impl SolidsRenderer {
         let (bind_group, pipeline) = build_bind_group_and_pipeline(device, bind_group_entries);
 
         Self {
-            spheres: Vec::new(),
-            cylinders: Vec::new(),
-            cuboids: Vec::new(),
+            solids: Vec::new(),
             tree: Vec::new(),
 
-            sphere_buffer,
-            cylinder_buffer,
-            cuboid_buffer,
+            solids_buffer,
             tree_buffer,
 
             pipeline,
             bind_group,
         }
     }
-    pub fn update(
-        &mut self,
-        (spheres, cylinders, cuboids): (Vec<Sphere>, Vec<Cylinder>, Vec<Cuboid>),
-    ) {
-        for sphere in &spheres {
-            assert!(sphere.is_valid(), "Invalid sphere: {:?}", sphere);
+    pub fn update(&mut self, solids: Vec<Solid>) {
+        for solid in &solids {
+            solid.assert_valid();
         }
 
-        let tree = bounding_ball_tree::build_tree(&spheres, &cylinders, &cuboids);
+        let tree = bounding_ball_tree::build_tree(&solids);
 
         assert_ne!(tree.len(), 0);
-        assert_eq!(
-            tree.len(),
-            2 * (spheres.len() + cylinders.len() + cuboids.len()) - 1
-        );
+        assert_eq!(tree.len(), 2 * solids.len() - 1);
 
-        self.spheres = spheres;
-        self.cylinders = cylinders;
-        self.cuboids = cuboids;
+        self.solids = solids;
         self.tree = tree;
     }
     pub fn push_to_gpu_buffers(&self, queue: &Queue) {
         assert_ne!(self.tree.len(), 0);
-        assert_eq!(
-            self.tree.len(),
-            2 * (self.spheres.len() + self.cylinders.len() + self.cuboids.len()) - 1
-        );
+        assert_eq!(self.tree.len(), 2 * self.solids.len() - 1);
 
         queue.write_buffer(
-            &self.sphere_buffer,
+            &self.solids_buffer,
             NO_OFFSET,
-            bytemuck::cast_slice(&self.spheres),
-        );
-        queue.write_buffer(
-            &self.cylinder_buffer,
-            NO_OFFSET,
-            bytemuck::cast_slice(&self.cylinders),
-        );
-        queue.write_buffer(
-            &self.cuboid_buffer,
-            NO_OFFSET,
-            bytemuck::cast_slice(&self.cuboids),
+            bytemuck::cast_slice(&self.solids),
         );
         queue.write_buffer(
             &self.tree_buffer,
@@ -184,7 +133,7 @@ fn build_bind_group_and_pipeline(
 fn build_bind_group_layout(device: &Device) -> BindGroupLayout {
     return device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("The solid buffers layout"),
-        entries: &[entry(0), entry(1), entry(2), entry(3)],
+        entries: &[entry(0), entry(1)],
     });
 
     fn entry(i: u32) -> BindGroupLayoutEntry {

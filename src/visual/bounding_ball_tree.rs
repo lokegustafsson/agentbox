@@ -1,18 +1,14 @@
-use crate::common::{Cuboid, Cylinder, Sphere};
+use crate::common::Solid;
 use cgmath::{prelude::*, Vector3};
 use std::iter::repeat;
 
-/// Build a bounding ball hierarchy binary tree in `O(n^2)` where
-/// `n = spheres.len() + cylinders.len() + cuboids.len()`
+/// Build a bounding ball hierarchy binary tree in `O(n^2)` where `n = solids.len()`
 // TODO: Mark root-ness externally and allow combining nodes/final_tree
-pub fn build_tree(spheres: &[Sphere], cylinders: &[Cylinder], cuboids: &[Cuboid]) -> Vec<Node> {
-    let spheres = spheres.iter().enumerate().map(Node::leaf_sphere);
-    let cylinders = cylinders.iter().enumerate().map(Node::leaf_cylinder);
-    let cuboids = cuboids.iter().enumerate().map(Node::leaf_cuboid);
-
-    let mut nodes: Vec<Option<Node>> = spheres
-        .chain(cylinders)
-        .chain(cuboids)
+pub fn build_tree(solids: &[Solid]) -> Vec<Node> {
+    let mut nodes: Vec<Option<Node>> = solids
+        .iter()
+        .enumerate()
+        .map(Node::leaf)
         .map(|node| Some(node))
         .collect();
 
@@ -102,7 +98,7 @@ pub struct Node {
     pos: Vector3<f32>,
     radius: f32,
 
-    left: i32,
+    left: u32,
     right: u32,
 
     _padding: [u32; 2],
@@ -112,40 +108,15 @@ unsafe impl bytemuck::Pod for Node {}
 unsafe impl bytemuck::Zeroable for Node {}
 
 impl Node {
+    const NO_RIGHT_CHILD: u32 = u32::MAX;
     // Takes a tuple as it will be produced by [Iterator::enumerate]
-    pub(self) fn leaf_sphere((index, sphere): (usize, &Sphere)) -> Self {
-        Self {
-            pos: sphere.pos(),
-            radius: sphere.radius(),
-            left: -1, // Kind: Sphere => -1
-            right: index as u32,
-            _padding: [0; 2],
-        }
-    }
-    // Takes a tuple as it will be produced by [Iterator::enumerate]
-    pub(self) fn leaf_cylinder((index, cylinder): (usize, &Cylinder)) -> Self {
-        let pos = (cylinder.face_a() + cylinder.face_b()) / 2.0;
-        let radius = (pos.distance2(cylinder.face_a()) + cylinder.radius().powi(2)).sqrt();
+    pub(self) fn leaf((index, solid): (usize, &Solid)) -> Self {
+        let (pos, radius) = solid.bounding_sphere();
         Self {
             pos,
             radius,
-            left: -2, // Kind: Cylinder => -2
-            right: index as u32,
-            _padding: [0; 2],
-        }
-    }
-    // Takes a tuple as it will be produced by [Iterator::enumerate]
-    pub(self) fn leaf_cuboid((index, cuboid): (usize, &Cuboid)) -> Self {
-        let axis_c = {
-            let axis = cuboid.axis_a().cross(cuboid.axis_b());
-            axis * cuboid.width() / axis.magnitude()
-        };
-        let diagonal = cuboid.axis_a() + cuboid.axis_b() + axis_c;
-        Self {
-            pos: cuboid.corner() + diagonal / 2.0,
-            radius: diagonal.magnitude() / 2.0,
-            left: -2, // Kind: Cylinder => -2
-            right: index as u32,
+            left: index as u32,
+            right: Self::NO_RIGHT_CHILD,
             _padding: [0; 2],
         }
     }
@@ -165,15 +136,15 @@ impl Node {
         Self {
             pos: joined_midpoint,
             radius: joined_radius,
-            left: a_index as i32,
+            left: a_index as u32,
             right: b_index as u32,
             _padding: [0; 2],
         }
     }
     pub(self) fn reflect_child_indices(&mut self, last_index: usize) {
         // Only if we are a branch
-        if self.left >= 0 {
-            self.left = (last_index as i32) - self.left;
+        if self.right != Self::NO_RIGHT_CHILD {
+            self.left = (last_index as u32) - self.left;
             self.right = (last_index as u32) - self.right;
         }
     }
@@ -181,8 +152,8 @@ impl Node {
         Self {
             pos: Vector3::zero(),
             radius: 0.0,
-            left: 0,
-            right: 0,
+            left: Self::NO_RIGHT_CHILD,
+            right: Self::NO_RIGHT_CHILD,
             _padding: [0; 2],
         }
     }

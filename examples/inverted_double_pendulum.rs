@@ -1,8 +1,8 @@
-use cgmath::Vector2;
 use agentbox::{
     self,
     models::{InvertedDoublePendulum, Status},
 };
+use cgmath::Vector2;
 use std::{thread, time::Duration};
 
 fn main() {
