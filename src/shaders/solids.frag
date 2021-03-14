@@ -241,7 +241,7 @@ vec3 solid_normal(const vec3 hit_pos, const mat4 solid) {
             return NO_HIT_NORMAL;
     }
     // FIXME Is inverting here a bottleneck?
-    return (inverse(to_local) * vec4(normal, 0)).xyz;
+    return normalize((inverse(to_local) * vec4(normal, 0)).xyz);
 }
 
 hit_report no_hit_report() {

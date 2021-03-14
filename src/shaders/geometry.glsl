@@ -32,19 +32,19 @@ float hit_time_unit_cylinder(const vec3 from, const vec3 ray) {
         const float C = dot(from.xy, from.xy) - 1;
         // Solve At^2 + 2Bt + C = 0. Return smallest positive root, else -1.
         float t = solve_quadratic(A, B, C);
-        if (t > 0) {
+        if (t > 0 && on_unit_cylinder(from + ray * t)) {
             time = min(time, t);
         }
     }
     {
         float t = (-1 - from.z) / ray.z;
-        if (t > 0 && on_unit_cube(from + ray * t)) {
+        if (t > 0 && on_unit_cylinder(from + ray * t)) {
             time = min(time, t);
         }
     }
     {
         float t = ( 1 - from.z) / ray.z;
-        if (t > 0 && on_unit_cube(from + ray * t)) {
+        if (t > 0 && on_unit_cylinder(from + ray * t)) {
             time = min(time, t);
         }
     }

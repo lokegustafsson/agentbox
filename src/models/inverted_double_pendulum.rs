@@ -59,13 +59,13 @@ impl Model for InvertedDoublePendulum {
             Solid::new_sphere(world.bottom_pos.extend(0.0), NODE_RADIUS, CONTROL_COLOR),
             Solid::new_sphere(world.middle_pos, NODE_RADIUS, NODE_COLOR),
             Solid::new_sphere(world.top_pos, NODE_RADIUS, NODE_COLOR),
-            /*Solid::new_cylinder(
+            Solid::new_cylinder(
                 world.bottom_pos.extend(0.0),
                 world.middle_pos,
                 ROD_RADIUS,
                 ROD_COLOR,
             ),
-            Solid::new_cylinder(world.middle_pos, world.top_pos, ROD_RADIUS, ROD_COLOR),*/
+            Solid::new_cylinder(world.middle_pos, world.top_pos, ROD_RADIUS, ROD_COLOR),
         ]
     }
 }

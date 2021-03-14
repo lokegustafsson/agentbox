@@ -1,5 +1,5 @@
 use crate::models::Model;
-use cgmath::{prelude::*, Matrix3, Matrix4, Vector3, Vector4};
+use cgmath::{prelude::*, Matrix3, Matrix4, Rad, Vector3, Vector4};
 use std::sync::{atomic::AtomicUsize, Arc, Mutex};
 
 // Communication between the event loop and the simulation thread
@@ -72,12 +72,7 @@ unsafe impl bytemuck::Zeroable for Solid {}
 
 impl Solid {
     fn new(world_to_local: Matrix4<f32>, color: Vector3<f32>, kind: SolidKind) -> Self {
-        assert_eq!(
-            world_to_local.row(3),
-            Vector4::unit_w(),
-            "Last row must be identity in world_to_local: {:?}",
-            world_to_local
-        );
+        cgmath::assert_relative_eq!(world_to_local.row(3), Vector4::unit_w(),);
         assert!(
             world_to_local.is_invertible(),
             "world_to_local must be invertible: {:?}",
@@ -103,17 +98,15 @@ impl Solid {
         color: Vector3<f32>,
     ) -> Self {
         let midpoint: Vector3<f32> = (first + second) / 2.0;
-        let length_scale = (first - midpoint).magnitude();
-        // FIXME Working??
+        let axis = first - midpoint;
+        let length_scale = axis.magnitude();
         let world_to_local =
             Matrix4::from_nonuniform_scale(1.0 / radius, 1.0 / radius, 1.0 / length_scale)
-                * Matrix4::look_at_rh(
-                    <Vector3<_> as Into<[_; 3]>>::into(midpoint).into(),
-                    <Vector3<_> as Into<[_; 3]>>::into(first).into(),
-                    Vector3::unit_x(),
+                * Matrix4::from_axis_angle(
+                    axis.cross(Vector3::unit_z()).normalize(),
+                    Rad::acos(Vector3::unit_z().dot(axis / length_scale)),
                 )
-                .invert()
-                .unwrap();
+                * Matrix4::from_translation(-midpoint);
         Self::new(world_to_local, color, SolidKind::Cylinder)
     }
 
