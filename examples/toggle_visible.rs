@@ -1,7 +1,4 @@
-use agentbox::{
-    self,
-    models::{SimpleModel, Status},
-};
+use agentbox::{models::SimpleModel, Status};
 use cgmath::{prelude::*, Vector3};
 use std::time::{Duration, Instant};
 

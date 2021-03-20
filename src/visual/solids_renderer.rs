@@ -1,10 +1,9 @@
 use crate::{
-    common::Solid,
     visual::{
         bounding_ball_tree::{self, Node},
         graphics::{PushConstants, PUSH_CONSTANT_RANGE},
     },
-    SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
+    Solid, SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
 };
 use std::mem;
 use wgpu::*;
@@ -102,7 +101,7 @@ impl SolidsRenderer {
             bytemuck::cast_slice(&self.tree),
         );
     }
-    pub(crate) fn render<'a>(&'a self, pass: &mut RenderPass<'a>, push_constants: PushConstants) {
+    pub fn render<'a>(&'a self, pass: &mut RenderPass<'a>, push_constants: PushConstants) {
         pass.set_pipeline(&self.pipeline);
         pass.set_push_constants(
             ShaderStage::FRAGMENT,

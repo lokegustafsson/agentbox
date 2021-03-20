@@ -1,4 +1,4 @@
-use crate::{common::Solid, visual::solids_renderer::SolidsRenderer};
+use crate::{visual::solids_renderer::SolidsRenderer, Solid};
 use anyhow::*;
 use cgmath::{prelude::*, Matrix4, Vector2};
 use log::info;
@@ -15,7 +15,7 @@ pub const PUSH_CONSTANT_RANGE: PushConstantRange = PushConstantRange {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub(crate) struct PushConstants {
+pub struct PushConstants {
     pub(self) camera_to_world: Matrix4<f32>,
     pub(self) window_size: Vector2<f32>,
     _padding: [u32; 2],

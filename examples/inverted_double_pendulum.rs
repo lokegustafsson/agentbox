@@ -1,7 +1,4 @@
-use agentbox::{
-    self,
-    models::{InvertedDoublePendulum, Status},
-};
+use agentbox::{models::InvertedDoublePendulum, Status};
 use cgmath::Vector2;
 use std::{thread, time::Duration};
 

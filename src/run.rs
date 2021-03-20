@@ -1,15 +1,38 @@
-use crate::{
-    common::{SimulationEvent, WorldChannel},
-    models::{Model, Status},
-};
+use crate::{Model, Status};
 use log::{error, warn};
 use std::{
     panic,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
 };
 use winit::event_loop::EventLoopProxy;
 
-pub(crate) fn run_simulation<M: Model, F>(
+// Communication between the event loop and the simulation thread
+pub struct WorldChannel<M: Model> {
+    pub world: Mutex<Arc<M::World>>,
+    pub version: AtomicUsize,
+}
+
+impl<M: Model> WorldChannel<M> {
+    pub fn new() -> Self {
+        Self {
+            world: Mutex::new(Arc::new(M::new_world())),
+            version: AtomicUsize::new(0),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum SimulationEvent {
+    RequestExit,
+    RequestHide,
+    RequestShow,
+    SimulationPanic,
+}
+
+pub fn run_simulation<M: Model, F>(
     channel: Arc<WorldChannel<M>>,
     proxy: EventLoopProxy<SimulationEvent>,
     mut controller: F,

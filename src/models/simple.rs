@@ -1,4 +1,4 @@
-use crate::{common::Solid, models::Model};
+use crate::{Model, Solid};
 use cgmath::{prelude::*, Vector3};
 
 #[derive(Clone)]

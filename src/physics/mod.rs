@@ -1,3 +1,5 @@
+//! A toolbox for implementing the update part of a model.
+
 use cgmath::{prelude::*, Vector3};
 
 const DT: f32 = 0.01;

@@ -1,64 +1,8 @@
-use crate::models::Model;
 use cgmath::{prelude::*, Matrix3, Matrix4, Rad, Vector3, Vector4};
-use std::sync::{atomic::AtomicUsize, Arc, Mutex};
 
-// Communication between the event loop and the simulation thread
-
-pub struct WorldChannel<M: Model> {
-    pub world: Mutex<Arc<M::World>>,
-    pub version: AtomicUsize,
-}
-
-impl<M: Model> WorldChannel<M> {
-    pub fn new() -> Self {
-        Self {
-            world: Mutex::new(Arc::new(M::new_world())),
-            version: AtomicUsize::new(0),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum SimulationEvent {
-    RequestExit,
-    RequestHide,
-    RequestShow,
-    SimulationPanic,
-}
-
-// Structs that will be sent to the GPU
-
-pub enum SolidKind {
-    Sphere,
-    Cylinder,
-    Cube,
-}
-
-impl SolidKind {
-    const SPHERE: f32 = 1.0;
-    const CYLINDER: f32 = 2.0;
-    const CUBE: f32 = 4.0;
-    pub(super) const fn to_f32(self) -> f32 {
-        match self {
-            SolidKind::Sphere => Self::SPHERE,
-            SolidKind::Cylinder => Self::CYLINDER,
-            SolidKind::Cube => Self::CUBE,
-        }
-    }
-    pub(super) fn from_f32(f: f32) -> Self {
-        use SolidKind::*;
-        if f == Self::SPHERE {
-            Sphere
-        } else if f == Self::CYLINDER {
-            Cylinder
-        } else if f == Self::CUBE {
-            Cube
-        } else {
-            panic!("Bad float input")
-        }
-    }
-}
-
+/// The graphical primitive. A solid can represent any affine transformation of
+/// a sphere, cylinder or cube.
+// Memory representation:
 // [--- --- --- ---
 //  --- matrix  ---
 //  --- --- --- ---
@@ -86,11 +30,13 @@ impl Solid {
         matrix.w.w = kind.to_f32();
         Self(matrix)
     }
-
+    /// Create a sphere centered on `pos`, with radius `radius` and rgb-color `color`.
     pub fn new_sphere(pos: Vector3<f32>, radius: f32, color: Vector3<f32>) -> Self {
         let world_to_local = Matrix4::from_scale(1.0 / radius) * Matrix4::from_translation(-pos);
         Self::new(world_to_local, color, SolidKind::Sphere)
     }
+    /// Create a cylinder with radius `radius` and rgb-color `color`, where `first`
+    /// and `second` are the centers of the base disk and top disk respectively.
     pub fn new_cylinder(
         first: Vector3<f32>,
         second: Vector3<f32>,
@@ -110,10 +56,7 @@ impl Solid {
         Self::new(world_to_local, color, SolidKind::Cylinder)
     }
 
-    pub fn kind(&self) -> SolidKind {
-        SolidKind::from_f32(self.0.w.w)
-    }
-    pub fn world_to_local(self) -> Matrix4<f32> {
+    fn world_to_local(self) -> Matrix4<f32> {
         let mut matrix = self.0;
         matrix.x.w = 0.0;
         matrix.y.w = 0.0;
@@ -151,6 +94,37 @@ impl Solid {
         let _ = SolidKind::from_f32(self.0.w.w);
         assert!(self.0.is_finite());
         assert!(self.0.is_invertible());
+    }
+}
+
+enum SolidKind {
+    Sphere,
+    Cylinder,
+    Cube,
+}
+
+impl SolidKind {
+    const SPHERE: f32 = 1.0;
+    const CYLINDER: f32 = 2.0;
+    const CUBE: f32 = 4.0;
+    pub fn to_f32(self) -> f32 {
+        match self {
+            SolidKind::Sphere => Self::SPHERE,
+            SolidKind::Cylinder => Self::CYLINDER,
+            SolidKind::Cube => Self::CUBE,
+        }
+    }
+    pub fn from_f32(f: f32) -> Self {
+        use SolidKind::*;
+        if f == Self::SPHERE {
+            Sphere
+        } else if f == Self::CYLINDER {
+            Cylinder
+        } else if f == Self::CUBE {
+            Cube
+        } else {
+            panic!("Bad float input")
+        }
     }
 }
 

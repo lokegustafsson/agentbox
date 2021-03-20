@@ -4,8 +4,8 @@ mod graphics;
 mod solids_renderer;
 
 use crate::{
-    common::{SimulationEvent, WorldChannel},
-    models::Model,
+    run::{SimulationEvent, WorldChannel},
+    Model,
 };
 use anyhow::Result;
 use async_std::task::block_on;
@@ -22,7 +22,7 @@ use winit::{
     window::Window,
 };
 
-pub(crate) fn run_event_loop<M: Model + 'static>(
+pub fn run_event_loop<M: Model + 'static>(
     event_loop: EventLoop<SimulationEvent>,
     window: Window,
     channel: Arc<WorldChannel<M>>,

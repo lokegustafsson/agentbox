@@ -1,4 +1,4 @@
-use crate::common::Solid;
+use crate::Solid;
 use cgmath::{prelude::*, Vector3};
 use std::iter::repeat;
 
