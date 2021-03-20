@@ -26,16 +26,21 @@ impl Model for InvertedDoublePendulum {
     type Signals = IDPSignals;
 
     fn new_world() -> Self::World {
-        let disturbance = Vector3::new(0.04, 0.03, -0.01);
-        let unit_z = Vector3::unit_z();
+        let disturbance = || {
+            Vector3::new(
+                fastrand::f32() / 20.0,
+                fastrand::f32() / 20.0,
+                fastrand::f32() / 20.0,
+            )
+        };
         Self::World {
             base_pos: Zero::zero(),
             base_vel: Zero::zero(),
 
-            mid_pos: unit_z + disturbance,
+            mid_pos: Vector3::unit_z() + disturbance(),
             mid_vel: Zero::zero(),
 
-            top_pos: unit_z * 2.0,
+            top_pos: Vector3::unit_z() * 2.0 + disturbance(),
             top_vel: Zero::zero(),
         }
     }

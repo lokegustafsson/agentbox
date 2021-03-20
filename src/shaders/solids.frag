@@ -34,7 +34,7 @@ const float EPSILON = 0.01;
 const vec3 AMBIENT = vec3(0.08);
 const vec3 SUN_COLOR = vec3(1);
 const float SUN_SIZE = 1e-2;
-const vec3 SUN_DIRECTION = vec3(0, 1, 0);
+const vec3 SUN_DIRECTION = vec3(0, 0, 1);
 const float SUN_CORONA = 1e-3;
 
 // Global variables ===
