@@ -124,6 +124,26 @@ impl Node {
             (b.pos - a.pos).normalize()
         };
         let distance = (b.pos - a.pos).magnitude();
+
+        // One encloses the other
+        if a.radius > b.radius + distance {
+            return Self {
+                pos: a.pos,
+                radius: a.radius,
+                left: a_index as u32,
+                right: b_index as u32,
+                _padding: [0; 2],
+            };
+        } else if b.radius > a.radius + distance {
+            return Self {
+                pos: b.pos,
+                radius: b.radius,
+                left: a_index as u32,
+                right: b_index as u32,
+                _padding: [0; 2],
+            };
+        }
+
         let joined_midpoint =
             ((a.pos - rel_pos_norm * a.radius) + (b.pos + rel_pos_norm * b.radius)) / 2.0;
         let joined_radius = (distance + a.radius + b.radius) / 2.0;
