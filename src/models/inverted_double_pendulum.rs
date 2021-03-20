@@ -1,5 +1,5 @@
 use crate::{
-    physics::{self, Particle},
+    physics::{self, Particle, Spring},
     Model, Solid,
 };
 use cgmath::{prelude::*, Vector2, Vector3};
@@ -51,7 +51,7 @@ impl Model for InvertedDoublePendulum {
             Particle::new(w.mid_pos, w.mid_vel),
             Particle::new(w.top_pos, w.top_vel),
         ];
-        let new = physics::runge_kutta(&particles, signals, idp_accels);
+        let new = physics::time_step_with_rk4(&particles, signals, idp_accels);
 
         w.base_pos = new[0].pos.truncate();
         w.base_vel = new[0].vel.truncate();
@@ -62,15 +62,19 @@ impl Model for InvertedDoublePendulum {
 
         fn idp_accels(particles: &[Particle], signals: &IDPSignals) -> Vec<Vector3<f32>> {
             const GRAVITY_ACCEL: f32 = 0.3;
+
             if let [base, mid, top] = particles {
-                let mid_accel = physics::damped_spring_force(mid.pos, mid.vel, top.pos, top.vel)
-                    + physics::damped_spring_force(mid.pos, mid.vel, base.pos, base.vel)
-                    - Vector3::unit_z() * GRAVITY_ACCEL;
-
-                let top_accel = physics::damped_spring_force(top.pos, top.vel, mid.pos, mid.vel)
-                    - Vector3::unit_z() * GRAVITY_ACCEL;
-
-                vec![signals.base_accel.extend(0.0), mid_accel, top_accel]
+                vec![
+                    // Base
+                    signals.base_accel.extend(0.0),
+                    // Mid
+                    mid.spring_accel_from(top, Spring::UNIT_ROD)
+                        + mid.spring_accel_from(base, Spring::UNIT_ROD)
+                        - Vector3::unit_z() * GRAVITY_ACCEL,
+                    // Top
+                    top.spring_accel_from(mid, Spring::UNIT_ROD)
+                        - Vector3::unit_z() * GRAVITY_ACCEL,
+                ]
             } else {
                 unreachable!()
             }

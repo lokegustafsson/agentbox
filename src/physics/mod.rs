@@ -13,6 +13,16 @@ impl Particle {
     pub fn new(pos: Vector3<f32>, vel: Vector3<f32>) -> Self {
         Self { pos, vel }
     }
+    pub fn spring_accel_from(&self, other: &Particle, spring: &Spring) -> Vector3<f32> {
+        let rel_pos = self.pos - other.pos;
+        let radial_distance = rel_pos.magnitude();
+        let inverse_radial_distance = 1.0 / radial_distance;
+        let radial_vel = (self.vel - other.vel).dot(rel_pos) * inverse_radial_distance;
+        let radial_force =
+            spring.stiffness * (spring.rest_length - radial_distance) - spring.damping * radial_vel;
+
+        (radial_force * inverse_radial_distance) * rel_pos
+    }
 }
 impl Default for Particle {
     fn default() -> Self {
@@ -23,7 +33,21 @@ impl Default for Particle {
     }
 }
 
-pub fn runge_kutta<T>(
+pub struct Spring {
+    pub stiffness: f32,
+    pub damping: f32,
+    pub rest_length: f32,
+}
+
+impl Spring {
+    pub const UNIT_ROD: &'static Self = &Self {
+        stiffness: 1000.0,
+        damping: 10.0,
+        rest_length: 1.0,
+    };
+}
+
+pub fn time_step_with_rk4<T>(
     particles: &[Particle],
     extra_state: &T,
     accelerations: impl Fn(&[Particle], &T) -> Vec<Vector3<f32>>,
@@ -66,24 +90,4 @@ pub fn runge_kutta<T>(
         new.vel = old.vel + (a012 + a123) * (DT / 6.0);
     }
     new_particles
-}
-
-// Force on body2 from body1
-pub fn damped_spring_force(
-    pos2: Vector3<f32>,
-    vel2: Vector3<f32>,
-    pos1: Vector3<f32>,
-    vel1: Vector3<f32>,
-) -> Vector3<f32> {
-    const STIFFNESS: f32 = 1000.0; // N / m
-    const DAMPING: f32 = 10.0; // N / (m/s)
-    const REST_LEN: f32 = 1.0; // m
-
-    let rel_pos = pos2 - pos1;
-    let radial_distance = rel_pos.magnitude();
-    let inverse_radial_distance = 1.0 / radial_distance;
-    let radial_vel = (vel2 - vel1).dot(rel_pos) * inverse_radial_distance;
-    let radial_force = STIFFNESS * (REST_LEN - radial_distance) - DAMPING * radial_vel;
-
-    (radial_force * inverse_radial_distance) * rel_pos
 }
