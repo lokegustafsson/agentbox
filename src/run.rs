@@ -1,5 +1,3 @@
-pub mod physics;
-
 use crate::{
     common::{SimulationEvent, WorldChannel},
     models::{Model, Status},

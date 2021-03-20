@@ -1,7 +1,7 @@
 use crate::{
     common::Solid,
     models::Model,
-    simulation::physics::{self, Particle},
+    physics::{self, Particle},
 };
 use cgmath::{prelude::*, Vector2, Vector3};
 
