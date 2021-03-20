@@ -4,7 +4,7 @@ use cgmath::{prelude::*, Vector3};
 
 const DT: f32 = 0.01;
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Particle {
     pub pos: Vector3<f32>,
     pub vel: Vector3<f32>,
@@ -45,6 +45,36 @@ impl Spring {
         damping: 10.0,
         rest_length: 1.0,
     };
+}
+
+pub struct Plane {
+    normal: Vector3<f32>,
+    offset: f32,
+    stiffness: f32,
+    normal_damping: f32,
+    tangential_damping: f32,
+}
+
+impl Plane {
+    pub const FLOOR: &'static Self = &Self {
+        normal: Vector3::new(0.0, 0.0, 1.0),
+        offset: 0.0,
+        stiffness: 10000.0,
+        normal_damping: 10.0,
+        tangential_damping: 1.0,
+    };
+    pub fn collide_with(&self, particle: &Particle) -> Vector3<f32> {
+        let pos = particle.pos.dot(self.normal) - self.offset;
+        if pos > 0.0 {
+            Vector3::zero()
+        } else {
+            let normal_vel = particle.vel.dot(self.normal);
+            let tangent_vel = particle.vel - self.normal * normal_vel;
+            let normal_force = -self.stiffness * pos - normal_vel * self.normal_damping;
+            let tangent_force = -self.tangential_damping * tangent_vel;
+            self.normal * normal_force + tangent_force
+        }
+    }
 }
 
 pub fn time_step_with_rk4<T>(
