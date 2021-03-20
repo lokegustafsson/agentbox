@@ -1,4 +1,4 @@
-use cgmath::{prelude::*, Matrix3, Matrix4, Rad, Vector3, Vector4};
+use cgmath::{prelude::*, Matrix3, Matrix4, Quaternion, Rad, Vector3, Vector4};
 
 /// The graphical primitive. A solid can represent any affine transformation of
 /// a sphere, cylinder or cube.
@@ -54,6 +54,21 @@ impl Solid {
                 )
                 * Matrix4::from_translation(-midpoint);
         Self::new(world_to_local, color, SolidKind::Cylinder)
+    }
+    /// Create a rectangular cuboid
+    pub fn new_rectangular_cuboid(
+        dimensions: Vector3<f32>,
+        center: Vector3<f32>,
+        orientation: Quaternion<f32>,
+        color: Vector3<f32>,
+    ) -> Self {
+        let world_to_local = Matrix4::from_nonuniform_scale(
+            0.5 / dimensions.x,
+            0.5 / dimensions.y,
+            0.5 / dimensions.z,
+        ) * Matrix4::from(orientation.conjugate())
+            * Matrix4::from_translation(-center);
+        Self::new(world_to_local, color, SolidKind::Cube)
     }
 
     fn world_to_local(self) -> Matrix4<f32> {
