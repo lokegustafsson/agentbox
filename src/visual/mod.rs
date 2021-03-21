@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_std::task::block_on;
-use camera::Camera;
+use camera::{Camera, FpsCamera};
 use graphics::Graphics;
 use std::{
     sync::{atomic::Ordering, Arc, MutexGuard},
@@ -22,6 +22,9 @@ use winit::{
     window::Window,
 };
 
+const SPEED: f32 = 3.0;
+const SLOW_MODIFIER: f32 = 0.4;
+
 pub fn run_event_loop<M: Model + 'static>(
     event_loop: EventLoop<SimulationEvent>,
     window: Window,
@@ -30,7 +33,7 @@ pub fn run_event_loop<M: Model + 'static>(
 ) -> ! {
     let mut last_version = channel.version.load(Ordering::SeqCst);
     let mut graphics = block_on(Graphics::initialize(&window)).unwrap();
-    let mut camera = Camera::new();
+    let mut camera = FpsCamera::new();
     let mut last_timestamp = Instant::now();
     let mut capture_mouse = false;
     let mut slow_mode = false;
@@ -51,7 +54,13 @@ pub fn run_event_loop<M: Model + 'static>(
             Event::MainEventsCleared => {
                 let now_timestamp = Instant::now();
                 if visible {
-                    camera.update(now_timestamp.duration_since(last_timestamp));
+                    let speed = match slow_mode {
+                        true => SLOW_MODIFIER * SPEED,
+                        false => SPEED,
+                    };
+                    let dt = now_timestamp.duration_since(last_timestamp).as_secs_f32();
+
+                    camera.update(speed * dt);
                     window.request_redraw();
                 }
                 last_timestamp = now_timestamp;
@@ -83,7 +92,7 @@ pub fn run_event_loop<M: Model + 'static>(
                     }
                     slow_mode = mods.ctrl();
                 }
-                WindowEvent::KeyboardInput { input: key, .. } => camera.key_input(key, slow_mode),
+                WindowEvent::KeyboardInput { input: key, .. } => camera.key_input(key),
                 WindowEvent::CursorMoved { position: pos, .. } => {
                     if capture_mouse && continue_capture_mouse(&window) {
                         let size = window.inner_size();
