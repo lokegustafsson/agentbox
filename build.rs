@@ -8,16 +8,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const OPTLEVEL: OptimizationLevel = OptimizationLevel::Zero;
+
 fn main() -> Result<()> {
     let root_dir = &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let src_dir = &root_dir.join("src/");
     let target_dir = &root_dir.join("target/");
 
     let mut checksums = ShaderChecksums::load_already_compiled(target_dir);
-    let (shaders, includees) = get_all_shaders(src_dir)?;
+    let (shaders, include_map) = get_all_shaders(src_dir)?;
 
     // Shaderc init
-    let compile_options = compiler_options(src_dir.clone(), includees)?;
+    let compile_options = compiler_options(src_dir.clone(), include_map)?;
     let mut compiler = Compiler::new().context("Unable to create shader compiler")?;
 
     // Preprocess
@@ -95,7 +97,7 @@ fn compiler_options<'a>(
     include_map: HashMap<String, String>,
 ) -> Result<CompileOptions<'a>> {
     let mut options = CompileOptions::new().context("While creating shader compile options")?;
-    options.set_optimization_level(OptimizationLevel::Performance);
+    options.set_optimization_level(OPTLEVEL);
     options.set_warnings_as_errors();
     options.set_include_callback(move |to, kind, from, depth| {
         include_callback(&src_dir, &include_map, to, kind, from, depth)
@@ -120,13 +122,26 @@ fn compiler_options<'a>(
                 let target_path = src_dir
                     .join(from_include)
                     .parent()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        format!("Bad path: {:?} joined onto {:?}", from_include, src_dir)
+                    })?
                     .join(to_include);
 
                 match target_path.canonicalize() {
-                    Ok(target) => {
-                        String::from(target.strip_prefix(src_dir).unwrap().to_str().unwrap())
-                    }
+                    Ok(target) => String::from(
+                        target
+                            .strip_prefix(src_dir)
+                            .map_err(|_| {
+                                format!(
+                                    "Cannot strip {:?} from {:?} (canonicalized from {:?})",
+                                    src_dir, target, target_path
+                                )
+                            })?
+                            .to_str()
+                            .ok_or_else(|| {
+                                format!("Paths must be valid unicode within the repo: {:?}", target)
+                            })?,
+                    ),
 
                     Err(ioerror) => {
                         return Err(format!(
@@ -173,14 +188,14 @@ fn get_all_shaders(src_dir: &Path) -> Result<(Vec<ShaderSource>, HashMap<String,
         })
         .collect::<Result<_>>()?;
 
-    let (shaders, includees): (_, Vec<_>) = files.into_iter().partition(ShaderSource::is_top_level);
+    let (shaders, included): (_, Vec<_>) = files.into_iter().partition(ShaderSource::is_top_level);
 
-    let includees = includees
+    let include_map = included
         .into_iter()
         .map(|source| source.include_pair().unwrap())
         .collect();
 
-    return Ok((shaders, includees));
+    return Ok((shaders, include_map));
 }
 
 struct ShaderSource {
