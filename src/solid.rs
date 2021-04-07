@@ -55,7 +55,7 @@ impl Solid {
                 * Matrix4::from_translation(-midpoint);
         Self::new(world_to_local, color, SolidKind::Cylinder)
     }
-    /// Create a rectangular cuboid
+    /// Create a rectangular cuboid with width-depth-height given by `dimensions`
     pub fn new_rectangular_cuboid(
         dimensions: Vector3<f32>,
         center: Vector3<f32>,
@@ -63,9 +63,9 @@ impl Solid {
         color: Vector3<f32>,
     ) -> Self {
         let world_to_local = Matrix4::from_nonuniform_scale(
-            0.5 / dimensions.x,
-            0.5 / dimensions.y,
-            0.5 / dimensions.z,
+            2.0 / dimensions.x,
+            2.0 / dimensions.y,
+            2.0 / dimensions.z,
         ) * Matrix4::from(orientation.conjugate())
             * Matrix4::from_translation(-center);
         Self::new(world_to_local, color, SolidKind::Cube)
