@@ -16,14 +16,24 @@ pub struct BouncingSignals {
 
 pub struct BouncingBalls;
 
+const RADIUS: f32 = 0.3;
+
 impl Model for BouncingBalls {
     type World = BouncingWorld;
     type Signals = BouncingSignals;
 
     fn new_world() -> Self::World {
         Self::World {
-            first: Particle::new(Vector3::new(-4.0, 4.0, 5.0), Vector3::unit_x()),
-            second: Particle::new(Vector3::new(0.0, 4.0, 10.0), -Vector3::unit_y()),
+            first: Particle::new(
+                Vector3::new(-6.0, 4.0, 5.0),
+                0.5f32 * Vector3::unit_x(),
+                RADIUS,
+            ),
+            second: Particle::new(
+                Vector3::new(0.0, 6.0, 10.0),
+                -0.5f32 * Vector3::unit_y(),
+                RADIUS,
+            ),
         }
     }
     fn new_signals() -> Self::Signals {
@@ -31,7 +41,11 @@ impl Model for BouncingBalls {
     }
 
     fn update(world: &mut Self::World, _signals: &Self::Signals) {
-        let new = physics::time_step_with_rk4(&[world.first, world.second], &(), accels);
+        let mut new = physics::time_step_with_rk4(&[world.first, world.second], &(), accels);
+        new = physics::time_step_with_rk4(&new, &(), accels);
+        new = physics::time_step_with_rk4(&new, &(), accels);
+        new = physics::time_step_with_rk4(&new, &(), accels);
+        new = physics::time_step_with_rk4(&new, &(), accels);
 
         world.first = new[0];
         world.second = new[1];
@@ -51,15 +65,14 @@ impl Model for BouncingBalls {
     }
 
     fn get_solids(world: &Self::World) -> Vec<Solid> {
-        const RADIUS: f32 = 1.0;
         const COLOR: Vector3<f32> = Vector3::new(0.5, 0.5, 0.2);
         const GROUND_COLOR: Vector3<f32> = Vector3::new(0.9, 0.9, 0.9);
         vec![
             Solid::new_sphere(world.first.pos, RADIUS, COLOR),
             Solid::new_sphere(world.second.pos, RADIUS, COLOR),
             Solid::new_rectangular_cuboid(
-                Vector3::new(4.0, 4.0, 0.1),
-                Vector3::unit_z() * (-1.2),
+                Vector3::new(10.0, 10.0, 0.1),
+                Vector3::unit_z() * (-0.05),
                 Quaternion::one(),
                 GROUND_COLOR,
             ),

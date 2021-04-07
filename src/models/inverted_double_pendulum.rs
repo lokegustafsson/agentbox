@@ -21,6 +21,8 @@ pub struct IDPSignals {
 
 pub struct InvertedDoublePendulum;
 
+const NODE_RADIUS: f32 = 0.15;
+
 impl Model for InvertedDoublePendulum {
     type World = IDPWorld;
     type Signals = IDPSignals;
@@ -37,11 +39,11 @@ impl Model for InvertedDoublePendulum {
             base_pos: Zero::zero(),
             base_vel: Zero::zero(),
 
-            mid_pos: Vector3::unit_z() + disturbance(),
-            mid_vel: Zero::zero(),
+            mid_pos: (Vector3::unit_z() + disturbance()).normalize(),
+            mid_vel: Vector3::zero(),
 
             top_pos: Vector3::unit_z() * 2.0 + disturbance(),
-            top_vel: Zero::zero(),
+            top_vel: Vector3::zero(),
         }
     }
     fn new_signals() -> Self::Signals {
@@ -52,9 +54,9 @@ impl Model for InvertedDoublePendulum {
 
     fn update(w: &mut Self::World, signals: &Self::Signals) {
         let particles = [
-            Particle::new(w.base_pos.extend(0.0), w.base_vel.extend(0.0)),
-            Particle::new(w.mid_pos, w.mid_vel),
-            Particle::new(w.top_pos, w.top_vel),
+            Particle::new(w.base_pos.extend(0.0), w.base_vel.extend(0.0), NODE_RADIUS),
+            Particle::new(w.mid_pos, w.mid_vel, NODE_RADIUS),
+            Particle::new(w.top_pos, w.top_vel, NODE_RADIUS),
         ];
         let new = physics::time_step_with_rk4(&particles, signals, idp_accels);
 
@@ -73,11 +75,15 @@ impl Model for InvertedDoublePendulum {
                     // Base
                     signals.base_accel.extend(0.0),
                     // Mid
-                    mid.spring_accel_from(top, Spring::UNIT_ROD)
-                        + mid.spring_accel_from(base, Spring::UNIT_ROD)
+                    mid.accel_from_spring_to(top, Spring::UNIT_ROD)
+                        + mid.accel_from_spring_to(base, Spring::UNIT_ROD)
+                        + mid.accel_from_collision_with(top)
+                        + mid.accel_from_collision_with(base)
                         - Vector3::unit_z() * GRAVITY_ACCEL,
                     // Top
-                    top.spring_accel_from(mid, Spring::UNIT_ROD)
+                    top.accel_from_spring_to(mid, Spring::UNIT_ROD)
+                        + top.accel_from_collision_with(mid)
+                        + top.accel_from_collision_with(base)
                         - Vector3::unit_z() * GRAVITY_ACCEL,
                 ]
             } else {
@@ -91,7 +97,6 @@ impl Model for InvertedDoublePendulum {
         const NODE_COLOR: Vector3<f32> = Vector3::new(0.5, 0.2, 0.3);
         const ROD_COLOR: Vector3<f32> = Vector3::new(0.0, 0.3, 0.6);
 
-        const NODE_RADIUS: f32 = 0.15;
         const ROD_RADIUS: f32 = 0.1;
 
         vec![
