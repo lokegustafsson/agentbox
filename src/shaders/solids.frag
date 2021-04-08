@@ -1,6 +1,7 @@
 #version 450
 #include "common.glsl"
 #include "geometry.glsl"
+#include "background.glsl"
 
 // Internal structs
 struct hit_report {
@@ -8,13 +9,6 @@ struct hit_report {
     vec3 normal;
     uint index;
 };
-struct rays {
-    vec3 reflected_pos;
-    vec3 reflected_ray;
-    vec3 refracted_pos;
-    vec3 refracted_ray;
-};
-
 
 // Constants ===
 const uint STACK_SIZE = 100;
@@ -60,7 +54,7 @@ layout(set=0, binding=1) readonly buffer Solids {
 vec3 simple_ray(const vec3, const vec3);
 float background(const vec3);
 hit_report cast_ray(const vec3, const vec3);
-float hit_time_aabb(const vec3, const vec3, const uint);
+float hit_time_node(const vec3, const vec3, const uint);
 float hit_time_solid(const vec3, const vec3, const mat4);
 vec3 solid_normal(const vec3, const mat4);
 hit_report no_hit_report();
@@ -83,7 +77,8 @@ void main() {
     } else if (invalid_push_constants) {
         fatal_error = ERROR_INVALID_PUSH_CONSTANTS;
     } else {
-        f_color = vec4(simple_ray(camera_pos.xyz / camera_pos.w, camera_ray.xyz), 1);
+        vec3 color = simple_ray(camera_pos.xyz / camera_pos.w, camera_ray.xyz);
+        f_color = vec4(color, 1);
     }
 
     switch (fatal_error) {
@@ -108,52 +103,6 @@ void main() {
     }
 }
 
-// A single iteration of Bob Jenkins' One-At-A-Time hashing algorithm.
-uint hash(uint x) {
-    x += (x << 10u);
-    x ^= (x >>  6u);
-    x += (x <<  3u);
-    x ^= (x >> 11u);
-    x += (x << 15u);
-    return x;
-}
-uint hash(uvec3 v) { return hash( v.x ^ hash(v.y) ^ hash(v.z)); }
-
-// Construct a float with half-open range [0:1] using low 23 bits.
-// All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
-float random(float x, float y, float z) {
-    const uint ieeeMantissa = 0x007FFFFFu;
-    const uint ieeeOne      = 0x3F800000u;
-    uint res = hash(floatBitsToUint(vec3(x,y,z)));
-    res &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
-    res |= ieeeOne;                          // Add fractional part to 1.0
-    return uintBitsToFloat(res) - 1.0;                        // Range [0:1]
-}
-
-float random_tile(vec3 pos, float zoom, float strength) {
-    pos *= zoom;
-    vec3 low = floor(pos);
-    vec3 offset = pos - low;
-    float c00 = mix(random(low.x, low.y, low.z), random(low.x, low.y, low.z+1), offset.z);
-    float c01 = mix(random(low.x, low.y+1, low.z), random(low.x, low.y+1, low.z+1), offset.z);
-    float c10 = mix(random(low.x+1, low.y, low.z), random(low.x+1, low.y, low.z+1), offset.z);
-    float c11 = mix(random(low.x+1, low.y+1, low.z), random(low.x+1, low.y+1, low.z+1), offset.z);
-    return mix(mix(c00, c01, offset.y), mix(c10, c11, offset.y), offset.x) * strength;
-}
-
-float square(float x) {
-    return x * x;
-}
-
-float smooth_noise(const vec3 dir) {
-    return square(random_tile(dir, 0.5, 0.5))
-    + square(random_tile(dir, 2, 0.2))
-    + square(random_tile(dir, 8, 0.2))
-    + random_tile(dir, 30, 0.1)
-    + random_tile(dir, 100, 0.05)
-    + random_tile(dir, 320, 0.05);
-}
-
 // Cast a ray using Blinn-Phong illumination
 vec3 simple_ray(const vec3 from, const vec3 ray) {
     hit_report hit = cast_ray(from, ray);
@@ -167,8 +116,8 @@ vec3 simple_ray(const vec3 from, const vec3 ray) {
 
     // Ambient
     vec3 light = AMBIENT * color;
-    if (cast_ray(hit_point + EPSILON * SUN_DIRECTION, SUN_DIRECTION).normal == NO_HIT_NORMAL) {
-        const float alignment = dot(normal, normalize(SUN_DIRECTION - ray));
+    if (cast_ray(hit_point + EPSILON * (SUN_DIRECTION + normal), SUN_DIRECTION).normal == NO_HIT_NORMAL) {
+        const float alignment = max(dot(normal, normalize(SUN_DIRECTION - ray)), 0);
         // Diffuse
         light += color * SUN_COLOR * alignment;
         // Specular
@@ -183,7 +132,7 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
     int stack_ptr = -1;
 
     const int root = 0; // See aabb_tree.rs
-    if (hit_time_aabb(from, ray, root) > 0) {
+    if (hit_time_node(from, ray, root) > 0) {
         stack[++stack_ptr] = root;
     }
     float first_hit_time = INITIAL_HIT_TIME_BOUND;
@@ -194,7 +143,7 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
             // Hit leaf
             const uint index = aabb_tree[hit].left;
             float time = hit_time_solid(from, ray, solids[index]);
-            if (time > 0 && time < first_hit_time) {
+            if (time >= 0 && time < first_hit_time) {
                 first_hit_time = time;
                 first_hit_index = index;
             }
@@ -202,8 +151,8 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
             // Continue traversal down
             uint left = aabb_tree[hit].left;
             uint right = aabb_tree[hit].right;
-            float l_hit = hit_time_aabb(from, ray, left);
-            float r_hit = hit_time_aabb(from, ray, right);
+            float l_hit = hit_time_node(from, ray, left);
+            float r_hit = hit_time_node(from, ray, right);
             if (r_hit < l_hit) {
                 float tmpf = l_hit;
                 l_hit = r_hit;
@@ -213,14 +162,14 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
                 left = right;
                 right = tmpi;
             }
-            if (r_hit > 0) {
+            if (r_hit >= 0) {
                 if (stack_ptr + 1 == STACK_SIZE) {
                     fatal_error = ERROR_STACK_OVERFLOW;
                     return no_hit_report();
                 }
                 stack[++stack_ptr] = right;
             }
-            if (l_hit > 0) {
+            if (l_hit >= 0) {
                 if (stack_ptr + 1 == STACK_SIZE) {
                     fatal_error = ERROR_STACK_OVERFLOW;
                     return no_hit_report();
@@ -241,26 +190,8 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
     }
 }
 
-float hit_time_aabb(const vec3 from, const vec3 ray, const uint index) {
-    vec3 epsilon = vec3(EPSILON);
-
-    vec3 mini = aabb_tree[index].mini - epsilon;
-    vec3 maxi = aabb_tree[index].maxi + epsilon;
-
-    vec3 t_mini = (mini - from) / ray;
-    vec3 t_maxi = (maxi - from) / ray;
-
-    vec3 times_enter = min(t_mini, t_maxi);
-    vec3 times_exit = max(t_mini, t_maxi);
-
-    float time_enter = max(times_enter.x, max(times_enter.y, times_enter.z));
-    float time_exit = min(times_exit.x, min(times_exit.y, times_exit.z));
-
-    if (time_enter < time_exit) {
-        return max(time_enter, EPSILON);
-    } else {
-        return -1;
-    }
+float hit_time_node(const vec3 from, const vec3 ray, const uint index) {
+    return hit_time_aabb(from, ray, aabb_tree[index].mini, aabb_tree[index].maxi);
 }
 
 float hit_time_solid(const vec3 from, const vec3 ray, const mat4 solid) {
