@@ -80,29 +80,32 @@ impl Solid {
         matrix
     }
 
-    pub(crate) fn bounding_sphere(&self) -> (Vector3<f32>, f32) {
+    /// Returns (min, max) for the AABB
+    pub(crate) fn bounding_aabb(&self) -> (Vector3<f32>, Vector3<f32>) {
         let local_to_world = self.world_to_local().invert().unwrap();
-        // local_to_world can be decomposed as a 3d linear transformation [linear], then a translation [pos]
-        let pos = local_to_world.w.truncate();
+        // local_to_world can be decomposed as a 3d linear transformation [linear],
+        // then a translation [center]
+        let center = local_to_world.w.truncate();
         let linear = Matrix3::from_cols(
             local_to_world.x.truncate(),
             local_to_world.y.truncate(),
             local_to_world.z.truncate(),
         );
-        // The object must be bounded by the cube with side length 2. Let's use a radius that is
-        // sufficient to enclose the parallelepiped image of that cube under [linear]
-        let radius_squared = &[
+        // The object must (pre-linear transformation) be bounded by the cube with side
+        // length 2, centered on the origin. Let's use the AABB encapsulating it,
+        // irrespective of the SolidKind.
+        let extent = &[
             Vector3::new(1.0, 1.0, 1.0),
             Vector3::new(1.0, 1.0, -1.0),
             Vector3::new(1.0, -1.0, 1.0),
             Vector3::new(1.0, -1.0, -1.0),
         ]
         .iter()
-        .map(|v| (linear * v).magnitude2())
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .map(|v| (linear * v).map(f32::abs))
+        .reduce(|a, b| Vector3::new(f32::max(a.x, b.x), f32::max(a.y, b.y), f32::max(a.z, b.z)))
         .unwrap();
 
-        (pos, radius_squared.sqrt())
+        (center - extent, center + extent)
     }
 
     pub(crate) fn assert_valid(&self) {
@@ -140,42 +143,5 @@ impl SolidKind {
         } else {
             panic!("Bad float input")
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn properly_bound_sphere(pos: Vector3<f32>, radius: f32) {
-        let inner = Solid::new_sphere(pos, radius, Vector3::unit_x());
-        let (bound_pos, bound_radius) = inner.bounding_sphere();
-        cgmath::assert_relative_eq!(bound_pos, pos);
-        assert!(bound_radius >= radius);
-    }
-
-    #[test]
-    fn properly_bound_sphere_origin_1() {
-        properly_bound_sphere(Vector3::zero(), 1.0);
-    }
-    #[test]
-    fn properly_bound_sphere_origin_large() {
-        properly_bound_sphere(Vector3::zero(), 123.0);
-    }
-    #[test]
-    fn properly_bound_sphere_origin_small() {
-        properly_bound_sphere(Vector3::zero(), 1.0 / 123.0);
-    }
-    #[test]
-    fn properly_bound_sphere_elsewhere_small() {
-        properly_bound_sphere(Vector3::unit_x(), 1.0 / 123.0);
-    }
-    #[test]
-    fn properly_bound_sphere_elsewhere_1() {
-        properly_bound_sphere(2.3f32 * Vector3::unit_x(), 1.0);
-    }
-    #[test]
-    fn properly_bound_sphere_elsewhere_large() {
-        properly_bound_sphere(100.0f32 * Vector3::unit_x(), 123.0);
     }
 }

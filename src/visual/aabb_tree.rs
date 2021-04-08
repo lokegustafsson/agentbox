@@ -2,7 +2,7 @@ use crate::Solid;
 use cgmath::{prelude::*, Vector3};
 use std::iter::repeat;
 
-/// Build a bounding ball hierarchy binary tree in `O(n^2)` where `n = solids.len()`
+/// Build a binary axis-aligned bounding box tree in `O(n^2)` where `n = solids.len()`
 // TODO: Mark root-ness externally and allow combining nodes/final_tree
 pub fn build_tree(solids: &[Solid]) -> Vec<Node> {
     let mut nodes: Vec<Option<Node>> = solids
@@ -79,24 +79,34 @@ pub fn build_tree(solids: &[Solid]) -> Vec<Node> {
     final_tree
 }
 
-// This is not strictly a valid metric for the nearest-neighbor chain algorithm, but we are
-// satisfied with an approximate tree
+// This is not strictly a valid metric for the nearest-neighbor chain algorithm,
+// but we are satisfied with an approximate tree.
+// This can be thought of as the "cost" of joining two nodes.
 fn metric(a: &Node, b: &Node) -> f32 {
-    let joined_radius = ((a.pos - b.pos).magnitude() + a.radius + b.radius) / 2.0;
-    // We return the increase in total volume (up to a constant factor) after a join
-    joined_radius.powi(3) - a.radius.powi(3) - b.radius.powi(3)
+    let a_extent = a.max - a.min;
+    let b_extent = b.max - b.min;
+    let c_extent = Vector3::new(
+        f32::max(a.max.x, b.max.x) - f32::min(a.min.x, b.min.x),
+        f32::max(a.max.y, b.max.y) - f32::min(a.min.y, b.min.y),
+        f32::max(a.max.z, b.max.z) - f32::min(a.min.z, b.min.z),
+    );
+    // We return the increase in total surface area (up to a constant factor) after
+    // a join.
+    return area(c_extent) - area(a_extent) - area(b_extent);
+
+    fn area(ext: Vector3<f32>) -> f32 {
+        ext.x * ext.y + ext.y * ext.z + ext.z * ext.x
+    }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Node {
-    pos: Vector3<f32>,
-    radius: f32,
-
+    min: Vector3<f32>,
     left: u32,
-    right: u32,
 
-    _padding: [u32; 2],
+    max: Vector3<f32>,
+    right: u32,
 }
 
 unsafe impl bytemuck::Pod for Node {}
@@ -106,54 +116,30 @@ impl Node {
     const NO_RIGHT_CHILD: u32 = u32::MAX;
     // Takes a tuple as it will be produced by [Iterator::enumerate]
     pub(self) fn leaf((index, solid): (usize, &Solid)) -> Self {
-        let (pos, radius) = solid.bounding_sphere();
+        let (min, max) = solid.bounding_aabb();
         Self {
-            pos,
-            radius,
+            min,
+            max,
             left: index as u32,
             right: Self::NO_RIGHT_CHILD,
-            _padding: [0; 2],
         }
     }
     pub(self) fn branch(a_index: usize, b_index: usize, nodes: &Vec<Option<Node>>) -> Self {
         let a = nodes[a_index].unwrap();
         let b = nodes[b_index].unwrap();
-        let rel_pos_norm = if b.pos == a.pos {
-            Vector3::zero()
-        } else {
-            (b.pos - a.pos).normalize()
-        };
-        let distance = (b.pos - a.pos).magnitude();
-
-        // One encloses the other
-        if a.radius > b.radius + distance {
-            return Self {
-                pos: a.pos,
-                radius: a.radius,
-                left: a_index as u32,
-                right: b_index as u32,
-                _padding: [0; 2],
-            };
-        } else if b.radius > a.radius + distance {
-            return Self {
-                pos: b.pos,
-                radius: b.radius,
-                left: a_index as u32,
-                right: b_index as u32,
-                _padding: [0; 2],
-            };
-        }
-
-        let joined_midpoint =
-            ((a.pos - rel_pos_norm * a.radius) + (b.pos + rel_pos_norm * b.radius)) / 2.0;
-        let joined_radius = (distance + a.radius + b.radius) / 2.0;
-        // The smallest sphere that encloses nodes [a] and [b]
         Self {
-            pos: joined_midpoint,
-            radius: joined_radius,
+            min: Vector3::new(
+                f32::min(a.min.x, b.min.x),
+                f32::min(a.min.y, b.min.y),
+                f32::min(a.min.z, b.min.z),
+            ),
+            max: Vector3::new(
+                f32::max(a.max.x, b.max.x),
+                f32::max(a.max.y, b.max.y),
+                f32::max(a.max.z, b.max.z),
+            ),
             left: a_index as u32,
             right: b_index as u32,
-            _padding: [0; 2],
         }
     }
     pub(self) fn reflect_child_indices(&mut self, last_index: usize) {
@@ -165,11 +151,10 @@ impl Node {
     }
     pub(self) fn placeholder() -> Self {
         Self {
-            pos: Vector3::zero(),
-            radius: 0.0,
+            min: Vector3::zero(),
+            max: Vector3::zero(),
             left: Self::NO_RIGHT_CHILD,
             right: Self::NO_RIGHT_CHILD,
-            _padding: [0; 2],
         }
     }
 }

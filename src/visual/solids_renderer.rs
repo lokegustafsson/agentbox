@@ -1,6 +1,6 @@
 use crate::{
     visual::{
-        bounding_ball_tree::{self, Node},
+        aabb_tree::{self, Node},
         graphics::{PushConstants, PUSH_CONSTANT_RANGE},
     },
     Solid, SOLIDS_FRAGMENT, WHOLECANVAS_VERTEX,
@@ -37,8 +37,7 @@ impl SolidsRenderer {
     pub fn new(device: &Device) -> Self {
         // Buffers
         let solids_buffer = create_buffer::<Solid>(device, "The solids buffer", MAX_SOLIDS);
-        let tree_buffer =
-            create_buffer::<Node>(device, "The bounding ball tree buffer", 2 * MAX_SOLIDS - 1);
+        let tree_buffer = create_buffer::<Node>(device, "The AABB tree buffer", 2 * MAX_SOLIDS - 1);
 
         // Bind group entries for the buffers
         let bind_group_entries = &[
@@ -78,7 +77,7 @@ impl SolidsRenderer {
             solid.assert_valid();
         }
 
-        let tree = bounding_ball_tree::build_tree(&solids);
+        let tree = aabb_tree::build_tree(&solids);
 
         assert_ne!(tree.len(), 0);
         assert_eq!(tree.len(), 2 * solids.len() - 1);

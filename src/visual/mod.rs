@@ -1,4 +1,4 @@
-mod bounding_ball_tree;
+mod aabb_tree;
 mod camera;
 mod graphics;
 mod solids_renderer;

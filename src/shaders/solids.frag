@@ -49,8 +49,8 @@ layout(push_constant) uniform PushConstants {
     mat4 camera_to_world;
     vec2 window_size;
 };
-layout(set=0, binding=0) readonly buffer BoundingBallTree {
-    BoundingBallNode ball_tree[];
+layout(set=0, binding=0) readonly buffer AABBTree {
+    AABBNode aabb_tree[];
 };
 layout(set=0, binding=1) readonly buffer Solids {
     mat4 solids[];
@@ -60,7 +60,7 @@ layout(set=0, binding=1) readonly buffer Solids {
 vec3 simple_ray(const vec3, const vec3);
 float background(const vec3);
 hit_report cast_ray(const vec3, const vec3);
-float hit_time_ball(const vec3, const vec3, const uint);
+float hit_time_aabb(const vec3, const vec3, const uint);
 float hit_time_solid(const vec3, const vec3, const mat4);
 vec3 solid_normal(const vec3, const mat4);
 hit_report no_hit_report();
@@ -78,7 +78,7 @@ void main() {
         || any(isnan(window_size))
         || any(lessThanEqual(window_size, vec2(0)));
 
-    if (ball_tree.length() != 2 * solids.length() - 1) {
+    if (aabb_tree.length() != 2 * solids.length() - 1) {
         fatal_error = ERROR_INVALID_BUFFER_SIZES;
     } else if (invalid_push_constants) {
         fatal_error = ERROR_INVALID_PUSH_CONSTANTS;
@@ -177,22 +177,22 @@ vec3 simple_ray(const vec3 from, const vec3 ray) {
     return light;
 }
 
-// Cast a ray by traversing [ball_tree].
+// Cast a ray by traversing [aabb_tree].
 hit_report cast_ray(const vec3 from, const vec3 ray) {
     uint stack[STACK_SIZE];
     int stack_ptr = -1;
 
-    const int root = 0; // See bounding_ball_tree.rs
-    if (hit_time_ball(from, ray, root) > 0) {
+    const int root = 0; // See aabb_tree.rs
+    if (hit_time_aabb(from, ray, root) > 0) {
         stack[++stack_ptr] = root;
     }
     float first_hit_time = INITIAL_HIT_TIME_BOUND;
     uint first_hit_index = 0;
     while (stack_ptr >= 0) {
         const uint hit = stack[stack_ptr--];
-        if (ball_tree[hit].right == LEAF_NODE) {
+        if (aabb_tree[hit].right == LEAF_NODE) {
             // Hit leaf
-            const uint index = ball_tree[hit].left;
+            const uint index = aabb_tree[hit].left;
             float time = hit_time_solid(from, ray, solids[index]);
             if (time > 0 && time < first_hit_time) {
                 first_hit_time = time;
@@ -200,10 +200,10 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
             }
         } else {
             // Continue traversal down
-            uint left = ball_tree[hit].left;
-            uint right = ball_tree[hit].right;
-            float l_hit = hit_time_ball(from, ray, left);
-            float r_hit = hit_time_ball(from, ray, right);
+            uint left = aabb_tree[hit].left;
+            uint right = aabb_tree[hit].right;
+            float l_hit = hit_time_aabb(from, ray, left);
+            float r_hit = hit_time_aabb(from, ray, right);
             if (r_hit < l_hit) {
                 float tmpf = l_hit;
                 l_hit = r_hit;
@@ -241,10 +241,26 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
     }
 }
 
-float hit_time_ball(const vec3 from, const vec3 ray, const uint index) {
-    const vec3 rel_from = from - ball_tree[index].pos;
-    const float scale = 1 / ball_tree[index].radius;
-    return hit_time_unit_sphere(rel_from * scale, ray * scale);
+float hit_time_aabb(const vec3 from, const vec3 ray, const uint index) {
+    vec3 epsilon = vec3(EPSILON);
+
+    vec3 mini = aabb_tree[index].mini - epsilon;
+    vec3 maxi = aabb_tree[index].maxi + epsilon;
+
+    vec3 t_mini = (mini - from) / ray;
+    vec3 t_maxi = (maxi - from) / ray;
+
+    vec3 times_enter = min(t_mini, t_maxi);
+    vec3 times_exit = max(t_mini, t_maxi);
+
+    float time_enter = max(times_enter.x, max(times_enter.y, times_enter.z));
+    float time_exit = min(times_exit.x, min(times_exit.y, times_exit.z));
+
+    if (time_enter < time_exit) {
+        return max(time_enter, EPSILON);
+    } else {
+        return -1;
+    }
 }
 
 float hit_time_solid(const vec3 from, const vec3 ray, const mat4 solid) {

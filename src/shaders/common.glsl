@@ -5,16 +5,14 @@ const uint CYLINDER_KIND = 2;
 const uint CUBE_KIND = 3;
 
 // Buffer items need their size to be a multiple of 16 bytes. This struct is 32 bytes.
-struct BoundingBallNode {
-    vec3 pos;
-    float radius;
+struct AABBNode {
+    vec3 mini;
     // Doubles as solid index if right == LEAF_NODE
     uint left;
+
+    vec3 maxi;
     // We are a leaf if right == LEAF_NODE
     uint right;
-
-    int _padding1;
-    int _padding2;
 };
 
 // Solids are sent to the GPU as mat4. Since every mat4 expressing a 3d transformation in homogenous
