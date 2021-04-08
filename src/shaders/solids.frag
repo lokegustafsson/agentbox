@@ -6,6 +6,7 @@
 // Internal structs
 struct hit_report {
     vec3 pos;
+    float local_pos_noise;
     vec3 normal;
     uint index;
 };
@@ -30,6 +31,7 @@ const vec3 SUN_COLOR = vec3(1);
 const float SUN_SIZE = 1e-2;
 const vec3 SUN_DIRECTION = vec3(0, 0, 1);
 const float SUN_CORONA = 1e-3;
+const float SOLID_SPECKLING = 0.5;
 
 // Global variables ===
 uint fatal_error = ERROR_NONE;
@@ -56,7 +58,7 @@ float background(const vec3);
 hit_report cast_ray(const vec3, const vec3);
 float hit_time_node(const vec3, const vec3, const uint);
 float hit_time_solid(const vec3, const vec3, const mat4);
-vec3 solid_normal(const vec3, const mat4);
+vec4 solid_normal_and_noise(const vec3, const mat4);
 hit_report no_hit_report();
 
 void main() {
@@ -112,7 +114,7 @@ vec3 simple_ray(const vec3 from, const vec3 ray) {
     }
     const vec3 hit_point = hit.pos;
     const vec3 normal = hit.normal;
-    vec3 color = solid_get_color(solids[hit.index]);
+    vec3 color = solid_get_color(solids[hit.index]) + SOLID_SPECKLING * vec3(hit.local_pos_noise - 0.5);
 
     // Ambient
     vec3 light = AMBIENT * color;
@@ -182,9 +184,11 @@ hit_report cast_ray(const vec3 from, const vec3 ray) {
         return no_hit_report();
     } else {
         const vec3 hit_pos = from + ray * first_hit_time;
+        const vec4 normalnoise = solid_normal_and_noise(hit_pos, solids[first_hit_index]);
         return hit_report(
             hit_pos,
-            solid_normal(hit_pos, solids[first_hit_index]),
+            normalnoise.w,
+            normalnoise.xyz,
             first_hit_index
         );
     }
@@ -214,29 +218,32 @@ float hit_time_solid(const vec3 from, const vec3 ray, const mat4 solid) {
     }
 }
 
-vec3 solid_normal(const vec3 hit_pos, const mat4 solid) {
+vec4 solid_normal_and_noise(const vec3 hit_pos, const mat4 solid) {
     const mat4 to_local = solid_get_world_to_local(solid);
     const vec3 pos = (to_local * vec4(hit_pos, 1)).xyz;
 
-    vec3 normal;
+    vec3 local_normal;
     switch (solid_get_kind(solid)) {
         case SPHERE_KIND:
-            normal = normal_unit_sphere(pos);
+            local_normal = normal_unit_sphere(pos);
             break;
         case CYLINDER_KIND:
-            normal = normal_unit_cylinder(pos);
+            local_normal = normal_unit_cylinder(pos);
             break;
         case CUBE_KIND:
-            normal = normal_unit_cube(pos);
+            local_normal = normal_unit_cube(pos);
             break;
         default:
             fatal_error = ERROR_INVALID_KIND;
-            return NO_HIT_NORMAL;
+            return vec4(NO_HIT_NORMAL, 0);
     }
     // FIXME Is inverting here a bottleneck?
-    return normalize((inverse(to_local) * vec4(normal, 0)).xyz);
+    const vec3 normal = normalize((inverse(to_local) * vec4(local_normal, 0)).xyz);
+    const float noise = smooth_noise(pos + 3 * solid_get_kind(solid));
+
+    return vec4(normal, noise);
 }
 
 hit_report no_hit_report() {
-    return hit_report(vec3(0), NO_HIT_NORMAL, 0);
+    return hit_report(vec3(0), 0, NO_HIT_NORMAL, 0);
 }
