@@ -39,7 +39,10 @@ mod visual; // Everything graphical
 
 use run::{SimulationEvent, WorldChannel};
 use std::{mem, sync::Arc, thread};
-use winit::{event_loop::EventLoop, window::WindowBuilder};
+use winit::{
+    event_loop::{EventLoop, EventLoopBuilder},
+    window::WindowBuilder,
+};
 
 // Compiled shaders are referenced here, but used elsewhere. This allows us to
 // restructure the repo without breaking things.
@@ -56,7 +59,7 @@ where
         mem::size_of::<M>(),
         "A non-zero-sized Model type is nonsensical.",
     );
-    let event_loop: EventLoop<SimulationEvent> = EventLoop::with_user_event();
+    let event_loop: EventLoop<SimulationEvent> = EventLoopBuilder::with_user_event().build();
     let window = WindowBuilder::new()
         .with_title("Agentbox")
         .with_visible(initial_status.display_visual)

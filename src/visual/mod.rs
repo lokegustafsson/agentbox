@@ -19,7 +19,7 @@ use winit::{
     dpi::PhysicalPosition,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::Window,
+    window::{CursorGrabMode, Window},
 };
 
 const SPEED: f32 = 3.0;
@@ -32,7 +32,7 @@ pub fn run_event_loop<M: Model + 'static>(
     initial_visible: bool,
 ) -> ! {
     let mut last_version = channel.version.load(Ordering::SeqCst);
-    let mut graphics = block_on(Graphics::initialize(&window)).unwrap();
+    let mut graphics = block_on(Graphics::initialize(&window));
     let mut camera = FpsCamera::new();
     let mut last_timestamp = Instant::now();
     let mut capture_mouse = false;
@@ -127,7 +127,7 @@ pub fn run_event_loop<M: Model + 'static>(
 }
 
 fn begin_capture_mouse(window: &Window) -> Result<()> {
-    window.set_cursor_grab(true)?;
+    window.set_cursor_grab(CursorGrabMode::Confined)?;
     let size = window.inner_size();
     window.set_cursor_position(PhysicalPosition::new(size.width / 2, size.height / 2))?;
     window.set_cursor_visible(false);
@@ -140,6 +140,6 @@ fn continue_capture_mouse(window: &Window) -> bool {
         .is_ok()
 }
 fn stop_capture_mouse(window: &Window) {
-    window.set_cursor_grab(false).unwrap();
+    window.set_cursor_grab(CursorGrabMode::None).unwrap();
     window.set_cursor_visible(true);
 }

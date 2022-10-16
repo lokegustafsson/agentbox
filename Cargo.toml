@@ -2,7 +2,7 @@
 name = "agentbox"
 version = "0.1.0"
 authors = ["Loke Gustafsson <lokegustafsson@pm.me>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,10 +11,11 @@ anyhow = "1.0"
 async-std = "1.7"
 bytemuck = "1.4"
 cgmath = "0.18"
+env_logger = "0.8"
 fastrand = "1.4"
 log = "0.4"
-wgpu = "0.7"
-winit = "0.24"
+wgpu = { version = "0.14", features = ["spirv"] }
+winit = "0.27"
 
 [build-dependencies]
 anyhow = "1.0"

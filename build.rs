@@ -1,4 +1,4 @@
-use anyhow::*;
+use anyhow::Context;
 use shaderc::{
     CompileOptions, Compiler, IncludeType, OptimizationLevel, ResolvedInclude, ShaderKind,
 };
@@ -10,7 +10,7 @@ use std::{
 
 const OPTLEVEL: OptimizationLevel = OptimizationLevel::Zero;
 
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     let root_dir = &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let src_dir = &root_dir.join("src/");
     let target_dir = &root_dir.join("target/");
@@ -77,7 +77,7 @@ fn preprocess_shaders(
     shaders: Vec<ShaderSource>,
     compiler: &mut Compiler,
     options: &CompileOptions,
-) -> Result<Vec<ShaderSource>> {
+) -> anyhow::Result<Vec<ShaderSource>> {
     shaders
         .into_iter()
         .map(|shader| {
@@ -95,7 +95,7 @@ fn preprocess_shaders(
 fn compiler_options<'a>(
     src_dir: PathBuf,
     include_map: HashMap<String, String>,
-) -> Result<CompileOptions<'a>> {
+) -> anyhow::Result<CompileOptions<'a>> {
     let mut options = CompileOptions::new().context("While creating shader compile options")?;
     options.set_optimization_level(OPTLEVEL);
     options.set_warnings_as_errors();
@@ -111,7 +111,7 @@ fn compiler_options<'a>(
         include_type: IncludeType,
         from_include: &str,
         depth: usize,
-    ) -> Result<ResolvedInclude, String> {
+    ) -> anyhow::Result<ResolvedInclude, String> {
         if depth >= 100 {
             return Err(format!("Bailing due to high include depth (= {})", depth));
         }
@@ -166,7 +166,7 @@ fn compiler_options<'a>(
     }
 }
 
-fn get_all_shaders(src_dir: &Path) -> Result<(Vec<ShaderSource>, HashMap<String, String>)> {
+fn get_all_shaders(src_dir: &Path) -> anyhow::Result<(Vec<ShaderSource>, HashMap<String, String>)> {
     assert!(src_dir.is_absolute());
     assert!(src_dir.is_dir());
 
@@ -177,7 +177,7 @@ fn get_all_shaders(src_dir: &Path) -> Result<(Vec<ShaderSource>, HashMap<String,
         .as_ref()
         .into_iter()
         .map(|glob_str| glob::glob(glob_str).context("Globbing for shaders"))
-        .collect::<Result<_>>()?;
+        .collect::<anyhow::Result<_>>()?;
 
     let files: Vec<ShaderSource> = paths
         .into_iter()
@@ -186,7 +186,7 @@ fn get_all_shaders(src_dir: &Path) -> Result<(Vec<ShaderSource>, HashMap<String,
             let absolute_path = src_dir.join(glob_result?);
             ShaderSource::load(absolute_path, src_dir)
         })
-        .collect::<Result<_>>()?;
+        .collect::<anyhow::Result<_>>()?;
 
     let (shaders, included): (_, Vec<_>) = files.into_iter().partition(ShaderSource::is_top_level);
 
@@ -205,7 +205,7 @@ struct ShaderSource {
 }
 
 impl ShaderSource {
-    pub fn load(path: PathBuf, src_dir: &Path) -> Result<Self> {
+    pub fn load(path: PathBuf, src_dir: &Path) -> anyhow::Result<Self> {
         assert!(path.is_absolute());
         assert!(path.is_file());
         assert!(src_dir.is_absolute());
@@ -221,7 +221,7 @@ impl ShaderSource {
             "frag" => Some(ShaderKind::Fragment),
             "comp" => Some(ShaderKind::Compute),
             "glsl" => None,
-            _ => bail!("Unsupported shader: {}", path.display()),
+            _ => anyhow::bail!("Unsupported shader: {}", path.display()),
         };
 
         let source = fs::read_to_string(&path)?;
