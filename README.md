@@ -1,7 +1,4 @@
-This will hopefully be some kind of graphical agent-control physics sandbox at some point.
+This was intended to be a graphical physics sandbox, but I abandoned it long ago.
 
-Preliminary todo list:
-
-- A general physics overhaul, i.e. use the AABB tree.
-- Air resistance
-- Orientation-forcing joints
+It has some cool things, like a CPU-constructed AABB-tree that is traversed on the GPU in a fragment
+shader to provide bootleg raytracing (because rasterization is less fun, mkay?).
